@@ -558,3 +558,112 @@ describe("CV-033 suggest urgency and routing", () => {
     expect(unknown.status).toBe(404);
   });
 });
+
+describe("CV-030 summarize long feedback", () => {
+  const longMessage = "The lift in block 12 has been breaking down almost every evening for the past three weeks and residents on the upper floors have to climb the stairs. ".repeat(2).trim();
+  const summaryOutput = '{"summary":"The block 12 lift keeps breaking down in the evenings, forcing residents to use the stairs."}';
+
+  async function createItem(app, message = longMessage) {
+    const created = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message, category: "Estate",
+    });
+    expect(created.status).toBe(201);
+    return created.body.feedback;
+  }
+
+  it("requires the admin role", async () => {
+    const app = await testApp();
+    const item = await createItem(app);
+    const response = await request(app).post(`/api/feedback/${item.id}/summary`);
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 404 for an unknown record", async () => {
+    const app = await testApp();
+    const response = await request(app).post("/api/feedback/nope/summary").set("x-user-role", "admin");
+    expect(response.status).toBe(404);
+  });
+
+  it("returns 400 for feedback of 200 characters or fewer without calling the model", async () => {
+    const fetchMock = vi.fn();
+    const app = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: fetchMock }) });
+    const item = await createItem(app, "x".repeat(200));
+    const response = await request(app).post(`/api/feedback/${item.id}/summary`).set("x-user-role", "admin");
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/longer than 200 characters/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("returns a clear 503 JSON error when no key is configured", async () => {
+    const app = await testApp();
+    const item = await createItem(app);
+    const response = await request(app).post(`/api/feedback/${item.id}/summary`).set("x-user-role", "admin");
+    expect(response.status).toBe(503);
+    expect(response.body.error).toMatch(/not configured/);
+  });
+
+  it("creates, stores and caches the summary while keeping the original readable", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "env-test-key");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(completion(summaryOutput)));
+    const app = await testApp({ openai: createOpenAiClient() });
+    const item = await createItem(app);
+
+    const first = await request(app).post(`/api/feedback/${item.id}/summary`).set("x-user-role", "admin");
+    expect(first.status).toBe(200);
+    expect(first.body.cached).toBe(false);
+    expect(first.body.feedback.summary).toBe("The block 12 lift keeps breaking down in the evenings, forcing residents to use the stairs.");
+    expect(first.body.feedback.summarizedAt).toMatch(/^\d{4}-/);
+    expect(first.body.feedback.message).toBe(longMessage);
+    expect(first.body.feedback.status).toBe("New");
+    expect(JSON.stringify(first.body)).not.toContain("env-test-key");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+
+    const second = await request(app).post(`/api/feedback/${item.id}/summary`).set("x-user-role", "admin");
+    expect(second.status).toBe(200);
+    expect(second.body.cached).toBe(true);
+    expect(second.body.feedback.summary).toBe(first.body.feedback.summary);
+    expect(second.body.feedback.summarizedAt).toBe(first.body.feedback.summarizedAt);
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+
+    const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+    const stored = inbox.body.feedback.find((entry) => entry.id === item.id);
+    expect(stored.summary).toBe(first.body.feedback.summary);
+    expect(stored.message).toBe(longMessage);
+  });
+
+  it("serves a cached summary without calling the model again", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(completion(summaryOutput));
+    const app = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: fetchMock }) });
+    const item = await createItem(app);
+    await request(app).post(`/api/feedback/${item.id}/summary`).set("x-user-role", "admin");
+    const again = await request(app).post(`/api/feedback/${item.id}/summary`).set("x-user-role", "admin");
+    expect(again.status).toBe(200);
+    expect(again.body.cached).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns 502 on upstream failure and leaves the record unchanged", async () => {
+    const app = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: async () => ({ ok: false, status: 500, json: async () => ({}) }) }) });
+    const item = await createItem(app);
+    const response = await request(app).post(`/api/feedback/${item.id}/summary`).set("x-user-role", "admin");
+    expect(response.status).toBe(502);
+    expect(response.body.error).toMatch(/unavailable/);
+    const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+    const stored = inbox.body.feedback.find((entry) => entry.id === item.id);
+    expect(stored.summary).toBeUndefined();
+    expect(stored.summarizedAt).toBeUndefined();
+    expect(stored.message).toBe(longMessage);
+  });
+
+  it("returns 502 on malformed output and stores nothing", async () => {
+    for (const content of ["not json", '{"summary":""}', '{"nope":"x"}']) {
+      const app = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: async () => completion(content) }) });
+      const item = await createItem(app);
+      const response = await request(app).post(`/api/feedback/${item.id}/summary`).set("x-user-role", "admin");
+      expect(response.status, content).toBe(502);
+      expect(response.body.error, content).toMatch(/could not be understood/);
+      const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+      expect(inbox.body.feedback.find((entry) => entry.id === item.id).summary, content).toBeUndefined();
+    }
+  });
+});

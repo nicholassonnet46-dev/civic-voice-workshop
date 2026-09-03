@@ -245,3 +245,4 @@ input[aria-invalid="true"] { border-color: #b2252a; }
 .ai-suggestion { border: 1px dashed var(--border-input); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; background: var(--bg-panel); }
 .ai-suggestion-rationale { margin: 0 !important; color: var(--text-muted); line-height: 1.5; }
 .ai-error { margin: 0; font-size: 13px; }
+.ai-summary { margin: 8px 0 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--bg-panel); border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.5; }

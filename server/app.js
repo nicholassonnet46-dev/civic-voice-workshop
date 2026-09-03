@@ -11,6 +11,7 @@ import { generateReference } from "./lib/reference.js";
 import { FEEDBACK_STATUSES, sortNewestFirst } from "./lib/feedback.js";
 import { normalizeFeedbackText } from "./lib/sanitize.js";
 import { verifyPassword } from "./lib/passwords.js";
+import { needsSummary, SUMMARY_MIN_LENGTH, summarizeFeedback } from "./lib/summarize.js";
 import { isValidTeam, isValidUrgency, suggestTriage, TEAMS, URGENCY_LEVELS } from "./lib/triage.js";
 
 export async function createApp(options = {}) {
@@ -159,6 +160,38 @@ export async function createApp(options = {}) {
     delete feedback.suggestion;
     await db.write();
     return res.json({ feedback });
+  });
+
+  // CV-030: one-sentence summary for long feedback, cached on the record so
+  // repeat requests never call the model again. The original text is untouched.
+  app.post("/api/feedback/:id/summary", async (req, res) => {
+    if (req.header("x-user-role") !== "admin") {
+      return res.status(403).json({ error: "Admin access required." });
+    }
+    const feedback = db.data.feedback.find((item) => item.id === req.params.id);
+    if (!feedback) return res.status(404).json({ error: "Feedback not found." });
+    if (!needsSummary(feedback.message)) {
+      return res.status(400).json({ error: `Summaries are only available for feedback longer than ${SUMMARY_MIN_LENGTH} characters.` });
+    }
+    if (typeof feedback.summary === "string" && feedback.summary.trim()) {
+      return res.json({ feedback, cached: true });
+    }
+    let summary;
+    try {
+      summary = await summarizeFeedback(feedback, openai);
+    } catch (error) {
+      if (error?.kind === "not_configured") {
+        return res.status(503).json({ error: "AI summaries are not configured on this server." });
+      }
+      if (error?.kind === "malformed") {
+        return res.status(502).json({ error: "The summary could not be understood. Please try again." });
+      }
+      return res.status(502).json({ error: "The summary service is unavailable. Please try again later." });
+    }
+    feedback.summary = summary;
+    feedback.summarizedAt = new Date().toISOString();
+    await db.write();
+    return res.json({ feedback, cached: false });
   });
 
   return app;
