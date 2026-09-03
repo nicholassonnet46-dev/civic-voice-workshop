@@ -37,6 +37,32 @@ describe("CivicVoice baseline API", () => {
     expect(response.body.feedback.message).toBe("Please add more benches.");
   });
 
+  it("rejects whitespace-only feedback that bypasses the browser", async () => {
+    const app = await testApp();
+    const response = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "   \n\t ",
+    });
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("Please enter feedback.");
+  });
+
+  it("rejects missing and non-string feedback", async () => {
+    const app = await testApp();
+    const missing = await request(app).post("/api/feedback").send({ nric: "S0000001A", name: "Aisha Rahman" });
+    expect(missing.status).toBe(400);
+    const numeric = await request(app).post("/api/feedback").send({ nric: "S0000001A", name: "Aisha Rahman", message: 123 });
+    expect(numeric.status).toBe(400);
+  });
+
+  it("trims useful feedback surrounded by whitespace and stores it", async () => {
+    const app = await testApp();
+    const response = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "  \n Please fix the lights. \n ",
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.feedback.message).toBe("Please fix the lights.");
+  });
+
   it("blocks the feedback list without the admin role header", async () => {
     const app = await testApp();
     const response = await request(app).get("/api/feedback");

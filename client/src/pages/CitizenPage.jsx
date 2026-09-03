@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { submitFeedback } from "../api";
-import { FEEDBACK_MAX_LENGTH, formatCharacterCount, isOverLimit } from "../feedback";
+import {
+  BLANK_FEEDBACK_MESSAGE,
+  FEEDBACK_MAX_LENGTH,
+  formatCharacterCount,
+  isBlankFeedback,
+  isOverLimit,
+  normalizeFeedback,
+} from "../feedback";
 
 export function CitizenPage({ user }) {
   const [message, setMessage] = useState("");
@@ -11,12 +18,16 @@ export function CitizenPage({ user }) {
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+    if (isBlankFeedback(message)) {
+      setError(BLANK_FEEDBACK_MESSAGE);
+      return;
+    }
     if (overLimit) {
       setError(`Feedback must be ${FEEDBACK_MAX_LENGTH} characters or fewer.`);
       return;
     }
     try {
-      await submitFeedback({ nric: user.nric, name: user.name, message });
+      await submitFeedback({ nric: user.nric, name: user.name, message: normalizeFeedback(message) });
       setSubmitted(true);
       setMessage("");
     } catch (requestError) {
