@@ -13,7 +13,7 @@ import {
 export function CitizenPage({ user }) {
   const [message, setMessage] = useState("");
   const [category, setCategory] = useState("");
-  const [submitted, setSubmitted] = useState(false);
+  const [submitted, setSubmitted] = useState(null);
   const [error, setError] = useState("");
   const overLimit = isOverLimit(message);
 
@@ -33,8 +33,8 @@ export function CitizenPage({ user }) {
       return;
     }
     try {
-      await submitFeedback({ nric: user.nric, name: user.name, category, message: normalizeFeedback(message) });
-      setSubmitted(true);
+      const response = await submitFeedback({ nric: user.nric, name: user.name, category, message: normalizeFeedback(message) });
+      setSubmitted(response.feedback);
       setMessage("");
       setCategory("");
     } catch (requestError) {
@@ -43,7 +43,7 @@ export function CitizenPage({ user }) {
   }
 
   function handleSubmitAnother() {
-    setSubmitted(false);
+    setSubmitted(null);
     setMessage("");
     setCategory("");
     setError("");
@@ -59,8 +59,13 @@ export function CitizenPage({ user }) {
       <section className="form-card">
         {submitted ? (
           <div className="success-panel">
-            <div className="success-banner">Thank you. Your feedback has been received.</div>
-            <p className="muted">We will review your feedback and act on it where we can.</p>
+            <div className="success-banner">
+              Thank you. Your feedback has been received.
+              {submitted.reference && (
+                <> Your reference number is <strong className="reference-number">{submitted.reference}</strong>.</>
+              )}
+            </div>
+            <p className="muted">Keep the reference number if you want to ask about this feedback later. We will review it and act on it where we can.</p>
             <button type="button" className="primary-button" onClick={handleSubmitAnother}>Submit another</button>
           </div>
         ) : (
