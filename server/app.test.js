@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import request from "supertest";
@@ -139,6 +139,40 @@ describe("CivicVoice baseline API", () => {
     const response = await request(app).get("/api/feedback").set("x-user-role", "admin");
     expect(response.status).toBe(200);
     expect(response.body.feedback.map((item) => item.id)).toEqual(["newest", "middle", "older"]);
+  });
+
+  it("lets an admin update feedback status and persists it", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "civic-voice-"));
+    const file = path.join(directory, "db.json");
+    const app = await createApp({ db: await createDb(file) });
+    const response = await request(app).patch("/api/feedback/fb-seed-1/status")
+      .set("x-user-role", "admin").send({ status: "In review" });
+    expect(response.status).toBe(200);
+    expect(response.body.feedback.status).toBe("In review");
+    const persisted = JSON.parse(await readFile(file, "utf8"));
+    expect(persisted.feedback.find((item) => item.id === "fb-seed-1").status).toBe("In review");
+  });
+
+  it("rejects an invalid status", async () => {
+    const app = await testApp();
+    const response = await request(app).patch("/api/feedback/fb-seed-1/status")
+      .set("x-user-role", "admin").send({ status: "Done" });
+    expect(response.status).toBe(400);
+    expect(response.body.error).toMatch(/New, In review, Closed/);
+  });
+
+  it("forbids status updates without the admin role", async () => {
+    const app = await testApp();
+    const response = await request(app).patch("/api/feedback/fb-seed-1/status")
+      .set("x-user-role", "citizen").send({ status: "Closed" });
+    expect(response.status).toBe(403);
+  });
+
+  it("returns 404 when updating an unknown feedback id", async () => {
+    const app = await testApp();
+    const response = await request(app).patch("/api/feedback/nope/status")
+      .set("x-user-role", "admin").send({ status: "Closed" });
+    expect(response.status).toBe(404);
   });
 
   it("blocks the feedback list without the admin role header", async () => {

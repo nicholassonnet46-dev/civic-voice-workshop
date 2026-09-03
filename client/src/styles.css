@@ -164,6 +164,7 @@ textarea { resize: vertical; line-height: 1.6; }
 .feedback-row p { margin: 8px 0 0; line-height: 1.55; }
 .feedback-meta { color: var(--text-muted); font-size: 13px; }
 .masked-id { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.status-select { align-self: flex-start; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px; background: var(--bg-elevated); color: inherit; }
 .status-pill { align-self: flex-start; white-space: nowrap; background: var(--pill-bg); color: var(--pill-text); border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; }
 @media (max-width: 760px) {
   .split-layout { grid-template-columns: 1fr; }
