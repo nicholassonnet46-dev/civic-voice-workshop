@@ -206,3 +206,10 @@ input[aria-invalid="true"] { border-color: #b2252a; }
 .inbox-controls .search-field { flex: 1; margin: 0; }
 .inbox-controls input[type="search"] { padding: 11px 13px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 22px; }
+.summary-card { display: grid; gap: 4px; min-width: 0; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; box-shadow: 0 8px 30px var(--card-shadow); }
+.summary-label { color: var(--text-muted); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }
+.summary-value { font-family: Fraunces, Georgia, serif; font-size: 32px; line-height: 1; letter-spacing: -.03em; }
+.summary-new .summary-value { color: var(--pill-text); }
+.summary-inReview .summary-value { color: #1f5f9a; }
+.summary-closed .summary-value { color: var(--success-text); }
