@@ -2,13 +2,17 @@ import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
 import { isValidCategory } from "./lib/categories.js";
+import { categorizeFeedback } from "./lib/categorize.js";
 import { createDb } from "./lib/db.js";
+import { createOpenAiClient } from "./lib/openai.js";
 import { generateReference } from "./lib/reference.js";
 import { FEEDBACK_STATUSES, sortNewestFirst } from "./lib/feedback.js";
 import { normalizeFeedbackText } from "./lib/sanitize.js";
 
 export async function createApp(options = {}) {
   const db = options.db ?? (await createDb());
+  // Server-side only: the OpenAI key comes from process.env and never reaches the browser.
+  const openai = options.openai ?? createOpenAiClient();
   const app = express();
   app.use(cors());
   app.use(express.json());
@@ -40,13 +44,18 @@ export async function createApp(options = {}) {
     const { nric, name } = req.body ?? {};
     const message = normalizeFeedbackText(req.body?.message);
     if (!message) return res.status(400).json({ error: "Please enter feedback." });
-    const category = req.body?.category === undefined ? "Other" : req.body.category;
-    if (!isValidCategory(category)) {
+    const requested = req.body?.category === undefined ? "Other" : req.body.category;
+    if (!isValidCategory(requested)) {
       return res.status(400).json({ error: "Please choose a valid category." });
     }
+    // A specific citizen choice is kept. "Other" (or no choice) is auto-categorized:
+    // by the model when a key is configured, otherwise by a deterministic keyword rule.
+    const { category, categorySource } = requested === "Other"
+      ? await categorizeFeedback(message, openai)
+      : { category: requested, categorySource: "citizen" };
     const feedback = {
       id: crypto.randomUUID(), reference: generateReference(db.data.feedback),
-      nric, name, message, category, status: "New",
+      nric, name, message, category, categorySource, status: "New",
       createdAt: new Date().toISOString(),
     };
     db.data.feedback.unshift(feedback);
