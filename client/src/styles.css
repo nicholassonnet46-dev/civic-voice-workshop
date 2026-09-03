@@ -234,3 +234,14 @@ input[aria-invalid="true"] { border-color: #b2252a; }
   .inbox-state { padding: 32px 14px; }
   .inbox-error .primary-button { width: 100%; }
 }
+.ai-actions { margin-top: 10px; display: grid; gap: 8px; font-size: 13px; }
+.ai-buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+.small-button { border: 0; background: var(--accent); color: var(--on-accent); border-radius: 6px; padding: 6px 12px; font-size: 13px; font-weight: 600; }
+.small-button.secondary { background: transparent; color: var(--accent); border: 1px solid var(--border-input); }
+.small-button:hover { border-color: var(--accent); }
+.small-button:disabled { opacity: .65; cursor: wait; }
+.triage-label { text-transform: uppercase; letter-spacing: .08em; font-size: 11px; font-weight: 700; color: var(--text-muted); margin-right: 4px; }
+.triage-line { color: var(--text-label); }
+.ai-suggestion { border: 1px dashed var(--border-input); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; background: var(--bg-panel); }
+.ai-suggestion-rationale { margin: 0 !important; color: var(--text-muted); line-height: 1.5; }
+.ai-error { margin: 0; font-size: 13px; }
