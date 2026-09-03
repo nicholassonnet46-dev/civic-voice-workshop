@@ -126,6 +126,21 @@ describe("CivicVoice baseline API", () => {
     expect(references.size).toBe(10);
   });
 
+  it("returns feedback newest first regardless of stored order", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "civic-voice-"));
+    const db = await createDb(path.join(directory, "db.json"));
+    db.data.feedback = [
+      { id: "older", message: "older", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "newest", message: "newest", createdAt: "2026-03-01T00:00:00.000Z" },
+      { id: "middle", message: "middle", createdAt: "2026-02-01T00:00:00.000Z" },
+    ];
+    await db.write();
+    const app = await createApp({ db });
+    const response = await request(app).get("/api/feedback").set("x-user-role", "admin");
+    expect(response.status).toBe(200);
+    expect(response.body.feedback.map((item) => item.id)).toEqual(["newest", "middle", "older"]);
+  });
+
   it("blocks the feedback list without the admin role header", async () => {
     const app = await testApp();
     const response = await request(app).get("/api/feedback");

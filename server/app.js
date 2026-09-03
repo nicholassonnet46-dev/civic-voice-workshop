@@ -4,6 +4,7 @@ import cors from "cors";
 import { isValidCategory } from "./lib/categories.js";
 import { createDb } from "./lib/db.js";
 import { generateReference } from "./lib/reference.js";
+import { sortNewestFirst } from "./lib/feedback.js";
 
 export async function createApp(options = {}) {
   const db = options.db ?? (await createDb());
@@ -31,7 +32,7 @@ export async function createApp(options = {}) {
     if (req.header("x-user-role") !== "admin") {
       return res.status(403).json({ error: "Admin access required." });
     }
-    return res.json({ feedback: db.data.feedback });
+    return res.json({ feedback: sortNewestFirst(db.data.feedback) });
   });
 
   app.post("/api/feedback", async (req, res) => {
