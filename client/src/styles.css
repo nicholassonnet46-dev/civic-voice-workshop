@@ -70,3 +70,5 @@ textarea { resize: vertical; line-height: 1.6; }
 .success-panel .success-banner { width: 100%; margin-bottom: 4px; }
 .success-panel p { margin: 0 0 8px; line-height: 1.6; }
 .reference-number { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.field-error { color: #b2252a; font-size: 13px; font-weight: 500; }
+input[aria-invalid="true"] { border-color: #b2252a; }

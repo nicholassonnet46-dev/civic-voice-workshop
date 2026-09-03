@@ -1,19 +1,32 @@
 import { useState } from "react";
 import { login } from "../api";
+import { normalizeNric, validateNric } from "../validation";
 
 export function LoginPage({ onLogin }) {
   const [role, setRole] = useState("citizen");
   const [nric, setNric] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [nricError, setNricError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  function handleNricChange(event) {
+    setNric(event.target.value);
+    if (nricError) setNricError("");
+  }
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setBusy(true);
     setError("");
+    const validationMessage = validateNric(nric);
+    if (validationMessage) {
+      setNricError(validationMessage);
+      return;
+    }
+    setNricError("");
+    setBusy(true);
     try {
-      const session = await login({ nric, password, role });
+      const session = await login({ nric: normalizeNric(nric), password, role });
       onLogin(session);
     } catch (requestError) {
       setError(requestError.message);
@@ -44,7 +57,14 @@ export function LoginPage({ onLogin }) {
           </div>
           <form onSubmit={handleSubmit}>
             <label>NRIC
-              <input value={nric} onChange={(event) => setNric(event.target.value)} placeholder="e.g. S0000001A" />
+              <input
+                value={nric}
+                onChange={handleNricChange}
+                placeholder="e.g. S0000001A"
+                aria-invalid={nricError ? "true" : undefined}
+                aria-describedby={nricError ? "nric-error" : undefined}
+              />
+              {nricError && <span id="nric-error" className="field-error">{nricError}</span>}
             </label>
             <label>Password
               <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" />
