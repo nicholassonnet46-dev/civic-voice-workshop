@@ -4,6 +4,7 @@ import { inboxReducer, inboxView, initialInboxState } from "../inboxState";
 import { maskIdentifier } from "../mask";
 import { normalizeQuery, searchFeedback } from "../search";
 import { sortNewestFirst } from "../sortFeedback";
+import { summarizeFeedback, summaryCards } from "../summary";
 
 const STATUSES = ["New", "In review", "Closed"];
 
@@ -15,6 +16,7 @@ export function AdminPage({ user }) {
   const [actionError, setActionError] = useState("");
   const visible = searchFeedback(feedback, query);
   const searching = normalizeQuery(query).length > 0;
+  const cards = summaryCards(summarizeFeedback(feedback));
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -45,6 +47,16 @@ export function AdminPage({ user }) {
         <p>A simple view of feedback received from members of the public.</p>
       </div>
       {actionError && <p className="error-message">{actionError}</p>}
+      {view === "list" && (
+        <section className="summary-cards" aria-label="Inbox summary">
+          {cards.map((card) => (
+            <div className={`summary-card summary-${card.key}`} key={card.key}>
+              <span className="summary-label">{card.label}</span>
+              <strong className="summary-value">{card.value}</strong>
+            </div>
+          ))}
+        </section>
+      )}
       <section className="feedback-list" aria-busy={view === "loading"}>
         <div className="list-header">
           <strong>Latest feedback</strong>
