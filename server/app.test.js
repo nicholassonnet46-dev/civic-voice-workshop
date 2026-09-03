@@ -63,6 +63,42 @@ describe("CivicVoice baseline API", () => {
     expect(response.body.feedback.message).toBe("Please fix the lights.");
   });
 
+  it("stores the chosen category and returns it in the admin inbox", async () => {
+    const app = await testApp();
+    const created = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "The bus stop needs a shelter.", category: "Transport",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.feedback.category).toBe("Transport");
+
+    const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+    expect(inbox.status).toBe(200);
+    const stored = inbox.body.feedback.find((item) => item.id === created.body.feedback.id);
+    expect(stored.category).toBe("Transport");
+    const seeded = inbox.body.feedback.find((item) => item.id === "fb-seed-1");
+    expect(seeded.category).toBe("General");
+  });
+
+  it("rejects an unknown category", async () => {
+    const app = await testApp();
+    for (const category of ["Housing", "estate", "", 42, null]) {
+      const response = await request(app).post("/api/feedback").send({
+        nric: "S0000001A", name: "Aisha Rahman", message: "Useful text.", category,
+      });
+      expect(response.status, `category ${JSON.stringify(category)}`).toBe(400);
+      expect(response.body.error).toBe("Please choose a valid category.");
+    }
+  });
+
+  it("defaults to Other when no category is sent", async () => {
+    const app = await testApp();
+    const response = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "No category given.",
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.feedback.category).toBe("Other");
+  });
+
   it("blocks the feedback list without the admin role header", async () => {
     const app = await testApp();
     const response = await request(app).get("/api/feedback");

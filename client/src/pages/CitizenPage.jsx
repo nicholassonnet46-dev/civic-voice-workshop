@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { submitFeedback } from "../api";
+import { CATEGORY_REQUIRED_MESSAGE, FEEDBACK_CATEGORIES, isValidCategory } from "../categories";
 import {
   BLANK_FEEDBACK_MESSAGE,
   FEEDBACK_MAX_LENGTH,
@@ -11,6 +12,7 @@ import {
 
 export function CitizenPage({ user }) {
   const [message, setMessage] = useState("");
+  const [category, setCategory] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState("");
   const overLimit = isOverLimit(message);
@@ -18,6 +20,10 @@ export function CitizenPage({ user }) {
   async function handleSubmit(event) {
     event.preventDefault();
     setError("");
+    if (!isValidCategory(category)) {
+      setError(CATEGORY_REQUIRED_MESSAGE);
+      return;
+    }
     if (isBlankFeedback(message)) {
       setError(BLANK_FEEDBACK_MESSAGE);
       return;
@@ -27,9 +33,10 @@ export function CitizenPage({ user }) {
       return;
     }
     try {
-      await submitFeedback({ nric: user.nric, name: user.name, message: normalizeFeedback(message) });
+      await submitFeedback({ nric: user.nric, name: user.name, category, message: normalizeFeedback(message) });
       setSubmitted(true);
       setMessage("");
+      setCategory("");
     } catch (requestError) {
       setError(requestError.message);
     }
@@ -38,6 +45,7 @@ export function CitizenPage({ user }) {
   function handleSubmitAnother() {
     setSubmitted(false);
     setMessage("");
+    setCategory("");
     setError("");
   }
 
@@ -57,6 +65,14 @@ export function CitizenPage({ user }) {
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
+            <label>Category
+              <select value={category} onChange={(event) => setCategory(event.target.value)}>
+                <option value="">Select a category</option>
+                {FEEDBACK_CATEGORIES.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
             <label>Your feedback
               <textarea
                 rows="7"

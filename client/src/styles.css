@@ -1,7 +1,7 @@
 :root { font-family: "DM Sans", system-ui, sans-serif; color: #17222b; background: #f7f5f0; font-synthesis: none; }
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; }
-button, input, textarea { font: inherit; }
+button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 .site-header { height: 76px; display: flex; align-items: center; justify-content: space-between; padding: 0 5vw; border-bottom: 1px solid #e2dfd7; background: rgba(255,255,255,.88); }
 .brand { display: flex; align-items: center; gap: 10px; color: #17222b; text-decoration: none; font-weight: 700; }
@@ -27,8 +27,8 @@ h1, h2 { font-family: Fraunces, Georgia, serif; letter-spacing: -.04em; }
 .role-switch button { border: 0; border-radius: 6px; padding: 10px; color: #69747b; background: transparent; }
 .role-switch button.active { background: white; color: #17222b; font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
 label { display: grid; gap: 8px; margin: 15px 0; color: #38434a; font-size: 14px; font-weight: 600; }
-input, textarea { width: 100%; border: 1px solid #d5d2cb; border-radius: 8px; background: white; padding: 13px 14px; outline: none; }
-input:focus, textarea:focus { border-color: #b2252a; box-shadow: 0 0 0 3px rgba(178,37,42,.1); }
+input, select, textarea { width: 100%; border: 1px solid #d5d2cb; border-radius: 8px; background: white; padding: 13px 14px; outline: none; }
+input:focus, select:focus, textarea:focus { border-color: #b2252a; box-shadow: 0 0 0 3px rgba(178,37,42,.1); }
 textarea { resize: vertical; line-height: 1.6; }
 .primary-button { border: 0; background: #b2252a; color: white; border-radius: 8px; padding: 13px 18px; font-weight: 700; min-width: 145px; }
 .primary-button:hover { background: #8f1b20; }

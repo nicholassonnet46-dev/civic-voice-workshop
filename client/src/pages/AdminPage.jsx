@@ -22,7 +22,7 @@ export function AdminPage({ user }) {
         {feedback.map((item) => (
           <article className="feedback-row" key={item.id}>
             <div>
-              <div className="feedback-meta">{item.name} · {new Date(item.createdAt).toLocaleDateString()}</div>
+              <div className="feedback-meta">{item.name} · {item.category} · {new Date(item.createdAt).toLocaleDateString()}</div>
               <p>{item.message}</p>
             </div>
             <span className="status-pill">{item.status}</span>
