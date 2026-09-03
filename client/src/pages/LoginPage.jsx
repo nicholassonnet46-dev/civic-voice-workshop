@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { login } from "../api";
+import { HealthIndicator } from "../components/HealthIndicator";
 import { normalizeNric, validateNric } from "../validation";
 
 export function LoginPage({ onLogin }) {
@@ -72,6 +73,7 @@ export function LoginPage({ onLogin }) {
             {error && <p className="error-message">{error}</p>}
             <button className="primary-button" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
           </form>
+          <HealthIndicator />
           <details className="demo-help">
             <summary>Workshop demo accounts</summary>
             <p>Public: S0000001A / citizen123</p>
