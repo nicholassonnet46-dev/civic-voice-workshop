@@ -6,6 +6,6 @@ export default defineConfig({
   server: { port: 5173 },
   test: {
     environment: "node",
-    include: ["server/**/*.test.js", "facilitator/**/*.test.js"],
+    include: ["server/**/*.test.js", "facilitator/**/*.test.js", "client/**/*.test.js"],
   },
 });
