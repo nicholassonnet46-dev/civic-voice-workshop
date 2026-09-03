@@ -1,7 +1,11 @@
+import { hashPassword } from "./passwords.js";
+
+// Workshop demo credentials (see README): S0000001A / citizen123 and
+// S0000002B / admin123. Only the scrypt hash and salt are persisted.
 export const seedData = {
   users: [
-    { nric: "S0000001A", password: "citizen123", name: "Aisha Rahman", role: "citizen" },
-    { nric: "S0000002B", password: "admin123", name: "Daniel Tan", role: "admin" },
+    { nric: "S0000001A", ...hashPassword("citizen123"), name: "Aisha Rahman", role: "citizen" },
+    { nric: "S0000002B", ...hashPassword("admin123"), name: "Daniel Tan", role: "admin" },
   ],
   feedback: [
     {
