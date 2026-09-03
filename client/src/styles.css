@@ -213,3 +213,24 @@ input[aria-invalid="true"] { border-color: #b2252a; }
 .summary-new .summary-value { color: var(--pill-text); }
 .summary-inReview .summary-value { color: #1f5f9a; }
 .summary-closed .summary-value { color: var(--success-text); }
+/* CV-028: mobile admin. Stack rows, wrap controls, never scroll sideways. */
+.feedback-list { min-width: 0; }
+.feedback-row > div { min-width: 0; flex: 1; }
+.feedback-row p { overflow-wrap: anywhere; word-break: break-word; }
+.feedback-meta { display: flex; flex-wrap: wrap; gap: 0 4px; min-width: 0; }
+@media (max-width: 600px) {
+  .admin-shell { padding: 44px 16px; }
+  .form-card, .feedback-list { padding: 18px; border-radius: 12px; }
+  .list-header { flex-wrap: wrap; gap: 4px 12px; }
+  .inbox-controls { flex-wrap: wrap; }
+  .inbox-controls .search-field { flex: 1 1 100%; }
+  .inbox-controls .text-button { padding: 0; }
+  .feedback-row { flex-direction: column; gap: 10px; padding: 16px 0; }
+  .feedback-row .status-pill { align-self: flex-start; }
+  .feedback-row .status-select { align-self: stretch; width: 100%; }
+  .summary-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .summary-card { padding: 12px 14px; }
+  .summary-value { font-size: 26px; }
+  .inbox-state { padding: 32px 14px; }
+  .inbox-error .primary-button { width: 100%; }
+}
