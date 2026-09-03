@@ -100,66 +100,67 @@ export async function createApp(options = {}) {
     return res.json({ feedback });
   }));
 
-  // Unknown routes and thrown errors share the { error: { code, message } } contract.
-  app.use(notFoundHandler);
-  app.use(createErrorHandler({ log: options.logError }));
-
   // CV-033: AI-suggested urgency and routing. Suggestions are stored separately
   // from the record's own fields and never change `status`.
-  app.post("/api/feedback/:id/triage", async (req, res) => {
+  app.post("/api/feedback/:id/triage", asyncRoute(async (req, res) => {
     if (req.header("x-user-role") !== "admin") {
-      return res.status(403).json({ error: "Admin access required." });
+      throw new ApiError(ERROR_CODES.FORBIDDEN, "Admin access required.");
     }
     const feedback = db.data.feedback.find((item) => item.id === req.params.id);
-    if (!feedback) return res.status(404).json({ error: "Feedback not found." });
+    if (!feedback) throw new ApiError(ERROR_CODES.NOT_FOUND, "Feedback not found.");
     let suggestion;
     try {
       suggestion = await suggestTriage(feedback, openai);
     } catch (error) {
       if (error?.kind === "not_configured") {
-        return res.status(503).json({ error: "AI triage is not configured on this server." });
+        throw new ApiError(ERROR_CODES.UPSTREAM_UNAVAILABLE, "AI triage is not configured on this server.", 503);
       }
       if (error?.kind === "malformed") {
-        return res.status(502).json({ error: "The triage suggestion could not be understood. Please try again." });
+        throw new ApiError(ERROR_CODES.UPSTREAM_UNAVAILABLE, "The triage suggestion could not be understood. Please try again.", 502);
       }
-      return res.status(502).json({ error: "The triage service is unavailable. Please try again later." });
+      throw new ApiError(ERROR_CODES.UPSTREAM_UNAVAILABLE, "The triage service is unavailable. Please try again later.", 502);
     }
     feedback.suggestion = { ...suggestion, createdAt: new Date().toISOString() };
     await db.write();
     return res.json({ feedback });
-  });
+  }));
 
-  app.patch("/api/feedback/:id/triage", async (req, res) => {
+  app.patch("/api/feedback/:id/triage", asyncRoute(async (req, res) => {
     if (req.header("x-user-role") !== "admin") {
-      return res.status(403).json({ error: "Admin access required." });
+      throw new ApiError(ERROR_CODES.FORBIDDEN, "Admin access required.");
     }
     const { urgency, team } = req.body ?? {};
     if (!isValidUrgency(urgency)) {
-      return res.status(400).json({ error: `Urgency must be one of: ${URGENCY_LEVELS.join(", ")}.` });
+      throw new ApiError(ERROR_CODES.VALIDATION_ERROR, `Urgency must be one of: ${URGENCY_LEVELS.join(", ")}.`);
     }
     if (!isValidTeam(team)) {
-      return res.status(400).json({ error: `Team must be one of: ${TEAMS.join(", ")}.` });
+      throw new ApiError(ERROR_CODES.VALIDATION_ERROR, `Team must be one of: ${TEAMS.join(", ")}.`);
     }
     const feedback = db.data.feedback.find((item) => item.id === req.params.id);
-    if (!feedback) return res.status(404).json({ error: "Feedback not found." });
+    if (!feedback) throw new ApiError(ERROR_CODES.NOT_FOUND, "Feedback not found.");
     feedback.urgency = urgency;
     feedback.team = team;
     feedback.triagedAt = new Date().toISOString();
     delete feedback.suggestion;
     await db.write();
     return res.json({ feedback });
-  });
+  }));
 
-  app.delete("/api/feedback/:id/triage", async (req, res) => {
+  app.delete("/api/feedback/:id/triage", asyncRoute(async (req, res) => {
     if (req.header("x-user-role") !== "admin") {
-      return res.status(403).json({ error: "Admin access required." });
+      throw new ApiError(ERROR_CODES.FORBIDDEN, "Admin access required.");
     }
     const feedback = db.data.feedback.find((item) => item.id === req.params.id);
-    if (!feedback) return res.status(404).json({ error: "Feedback not found." });
+    if (!feedback) throw new ApiError(ERROR_CODES.NOT_FOUND, "Feedback not found.");
     delete feedback.suggestion;
     await db.write();
     return res.json({ feedback });
-  });
+  }));
+
+  // Unknown routes and thrown errors share the { error: { code, message } } contract.
+  // These must stay after every route.
+  app.use(notFoundHandler);
+  app.use(createErrorHandler({ log: options.logError }));
 
   return app;
 }

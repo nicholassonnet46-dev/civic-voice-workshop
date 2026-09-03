@@ -455,7 +455,7 @@ describe("CV-033 suggest urgency and routing", () => {
     const item = await createItem(app);
     const response = await request(app).post(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin");
     expect(response.status).toBe(503);
-    expect(response.body.error).toMatch(/not configured/);
+    expect(response.body.error.message).toMatch(/not configured/);
   });
 
   it("stores a validated suggestion without touching status", async () => {
@@ -489,7 +489,7 @@ describe("CV-033 suggest urgency and routing", () => {
     const item = await createItem(app);
     const response = await request(app).post(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin");
     expect(response.status).toBe(502);
-    expect(response.body.error).toMatch(/unavailable/);
+    expect(response.body.error.message).toMatch(/unavailable/);
     const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
     expect(inbox.body.feedback.find((entry) => entry.id === item.id).suggestion).toBeUndefined();
   });
@@ -507,7 +507,7 @@ describe("CV-033 suggest urgency and routing", () => {
       const item = await createItem(app);
       const response = await request(app).post(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin");
       expect(response.status, content).toBe(502);
-      expect(response.body.error, content).toMatch(/could not be understood/);
+      expect(response.body.error.message, content).toMatch(/could not be understood/);
       const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
       const stored = inbox.body.feedback.find((entry) => entry.id === item.id);
       expect(stored.suggestion, content).toBeUndefined();
