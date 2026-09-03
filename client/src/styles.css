@@ -245,3 +245,7 @@ input[aria-invalid="true"] { border-color: #b2252a; }
 .ai-suggestion { border: 1px dashed var(--border-input); border-radius: 8px; padding: 10px 12px; display: grid; gap: 8px; background: var(--bg-panel); }
 .ai-suggestion-rationale { margin: 0 !important; color: var(--text-muted); line-height: 1.5; }
 .ai-error { margin: 0; font-size: 13px; }
+.inbox-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 12px 0 6px; border-bottom: 1px solid var(--border-soft); }
+.inbox-filters .filter-field { display: grid; gap: 4px; margin: 0; font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.inbox-filters select { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 13px; background: var(--bg-elevated); color: var(--text); min-width: 150px; }
+.inbox-filters .text-button { padding: 8px 0; }

@@ -8,7 +8,7 @@ import { ApiError, ERROR_CODES, asyncRoute, createErrorHandler, notFoundHandler 
 import { createOpenAiClient } from "./lib/openai.js";
 import { createLoginLimiter } from "./lib/rateLimit.js";
 import { generateReference } from "./lib/reference.js";
-import { FEEDBACK_STATUSES, sortNewestFirst } from "./lib/feedback.js";
+import { FEEDBACK_STATUSES, filterFeedback, parseFeedbackFilters, sortNewestFirst } from "./lib/feedback.js";
 import { normalizeFeedbackText } from "./lib/sanitize.js";
 import { verifyPassword } from "./lib/passwords.js";
 import { isValidTeam, isValidUrgency, suggestTriage, TEAMS, URGENCY_LEVELS } from "./lib/triage.js";
@@ -59,7 +59,9 @@ export async function createApp(options = {}) {
     if (req.header("x-user-role") !== "admin") {
       throw new ApiError(ERROR_CODES.FORBIDDEN, "Admin access required.");
     }
-    return res.json({ feedback: sortNewestFirst(db.data.feedback) });
+    const { filters, error } = parseFeedbackFilters(req.query);
+    if (error) throw new ApiError(ERROR_CODES.VALIDATION_ERROR, error);
+    return res.json({ feedback: sortNewestFirst(filterFeedback(db.data.feedback, filters)) });
   });
 
   app.post("/api/feedback", asyncRoute(async (req, res) => {

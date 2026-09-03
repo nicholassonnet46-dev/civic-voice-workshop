@@ -1,4 +1,5 @@
 import { toApiError } from "./apiError.js";
+import { buildFilterQuery } from "./filters";
 
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
@@ -24,8 +25,8 @@ export function login(credentials) {
 export function submitFeedback(feedback) {
   return api("/api/feedback", { method: "POST", body: JSON.stringify(feedback) });
 }
-export function getFeedback(user) {
-  return api("/api/feedback", { headers: { "x-user-role": user.role } });
+export function getFeedback(user, filters) {
+  return api(`/api/feedback${buildFilterQuery(filters)}`, { headers: { "x-user-role": user.role } });
 }
 export function updateStatus(user, id, status) {
   return api(`/api/feedback/${encodeURIComponent(id)}/status`, {

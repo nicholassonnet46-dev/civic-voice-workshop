@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
 import { getFeedback, updateStatus } from "../api";
+import { InboxFilters } from "../components/InboxFilters";
+import { EMPTY_FILTERS, describeFilters, hasActiveFilters } from "../filters";
 import { inboxReducer, inboxView, initialInboxState } from "../inboxState";
 import { AiActions } from "../components/AiActions";
 import { maskIdentifier } from "../mask";
@@ -12,21 +14,23 @@ const STATUSES = ["New", "In review", "Closed"];
 export function AdminPage({ user }) {
   const [state, dispatch] = useReducer(inboxReducer, initialInboxState);
   const [query, setQuery] = useState("");
+  const [filters, setFilters] = useState({ ...EMPTY_FILTERS });
   const { feedback, error } = state;
   const view = inboxView(state);
   const [actionError, setActionError] = useState("");
   const visible = searchFeedback(feedback, query);
   const searching = normalizeQuery(query).length > 0;
   const cards = summaryCards(summarizeFeedback(feedback));
+  const filtering = hasActiveFilters(filters);
 
   const load = useCallback(() => {
     let cancelled = false;
     dispatch({ type: "load" });
-    getFeedback(user)
+    getFeedback(user, filters)
       .then((response) => { if (!cancelled) dispatch({ type: "loaded", feedback: sortNewestFirst(response.feedback) }); })
       .catch((requestError) => { if (!cancelled) dispatch({ type: "failed", error: requestError.message }); });
     return () => { cancelled = true; };
-  }, [user]);
+  }, [user, filters]);
 
   useEffect(() => load(), [load]);
 
@@ -69,7 +73,7 @@ export function AdminPage({ user }) {
             {view === "list" ? (searching ? `${visible.length} of ${feedback.length} items` : `${feedback.length} items`) : view === "loading" ? "Loading…" : ""}
           </span>
         </div>
-        {view === "list" && (
+        {(view === "list" || (view === "empty" && filtering)) && (
           <div className="inbox-controls">
             <label className="search-field">
               <span className="visually-hidden">Search feedback</span>
@@ -84,6 +88,9 @@ export function AdminPage({ user }) {
             {searching && <button type="button" className="text-button" onClick={() => setQuery("")}>Clear</button>}
           </div>
         )}
+        {(view === "list" || (view === "empty" && filtering)) && (
+          <InboxFilters filters={filters} onChange={setFilters} />
+        )}
         {view === "loading" && (
           <div className="inbox-state inbox-loading" role="status">
             <span className="spinner" aria-hidden="true" />
@@ -97,10 +104,16 @@ export function AdminPage({ user }) {
             <button type="button" className="primary-button" onClick={load}>Retry</button>
           </div>
         )}
-        {view === "empty" && (
+        {view === "empty" && !filtering && (
           <div className="inbox-state inbox-empty">
             <strong>No feedback yet</strong>
             <p>New submissions from members of the public will appear here.</p>
+          </div>
+        )}
+        {view === "empty" && filtering && (
+          <div className="inbox-state inbox-empty" role="status">
+            <strong>No feedback matches {describeFilters(filters)}</strong>
+            <p>Try another category or status, or <button type="button" className="text-button" onClick={() => setFilters({ ...EMPTY_FILTERS })}>clear the filters</button> to see all items.</p>
           </div>
         )}
         {view === "list" && searching && visible.length === 0 && (
