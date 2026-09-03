@@ -2,14 +2,26 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 import { createDb } from "./lib/db.js";
+import { createOpenAiClient } from "./lib/openai.js";
 
-async function testApp() {
+// Tests never spend OpenAI credits: fetch is stubbed and the key defaults to "".
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
+
+function completion(content) {
+  return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content } }] }) };
+}
+
+async function testApp(options = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "civic-voice-"));
   const db = await createDb(path.join(directory, "db.json"));
-  return createApp({ db });
+  const openai = options.openai ?? createOpenAiClient({ apiKey: "", fetch: () => { throw new Error("unexpected fetch"); } });
+  return createApp({ db, openai });
 }
 
 describe("CivicVoice baseline API", () => {
@@ -202,5 +214,88 @@ describe("CivicVoice baseline API", () => {
     const app = await testApp();
     const response = await request(app).get("/api/feedback");
     expect(response.status).toBe(403);
+  });
+});
+
+describe("CV-029 auto-categorize feedback", () => {
+  it("keeps a specific citizen category and marks the source as citizen", async () => {
+    const fetchMock = vi.fn();
+    const app = await testApp({ openai: createOpenAiClient({ apiKey: "test-key", fetch: fetchMock }) });
+    const response = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "The lift is broken again.", category: "Transport",
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.feedback.category).toBe("Transport");
+    expect(response.body.feedback.categorySource).toBe("citizen");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("asks the model when the citizen leaves the category as Other and stores the result", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(completion('{"category":"Estate"}'));
+    const app = await testApp({ openai: createOpenAiClient({ apiKey: "test-key", fetch: fetchMock }) });
+    const created = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "Something is wrong on level 7 of my building.", category: "Other",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.feedback.category).toBe("Estate");
+    expect(created.body.feedback.categorySource).toBe("ai");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body).response_format.type).toBe("json_schema");
+
+    const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+    const stored = inbox.body.feedback.find((item) => item.id === created.body.feedback.id);
+    expect(stored.category).toBe("Estate");
+    expect(stored.categorySource).toBe("ai");
+  });
+
+  it("uses the model when the category is omitted, via the stubbed global fetch and env key", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "env-test-key");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(completion('{"category":"Environment"}')));
+    const app = await testApp({ openai: createOpenAiClient() });
+    const response = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "It has been unpleasant near my home lately.",
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.feedback.category).toBe("Environment");
+    expect(response.body.feedback.categorySource).toBe("ai");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to the keyword rule when no key is configured", async () => {
+    const app = await testApp();
+    const response = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "Bus 12 skips my stop every morning.", category: "Other",
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.feedback.category).toBe("Transport");
+    expect(response.body.feedback.categorySource).toBe("fallback");
+  });
+
+  it("falls back when the upstream call fails or returns something outside the allowed list", async () => {
+    const failing = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: async () => ({ ok: false, status: 503, json: async () => ({}) }) }) });
+    const failed = await request(failing).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "Mosquitoes breeding in the blocked drain.", category: "Other",
+    });
+    expect(failed.status).toBe(201);
+    expect(failed.body.feedback).toMatchObject({ category: "Environment", categorySource: "fallback" });
+
+    const malformed = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: async () => completion('{"category":"Housing"}') }) });
+    const rejected = await request(malformed).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "The lift smells.", category: "Other",
+    });
+    expect(rejected.status).toBe(201);
+    expect(rejected.body.feedback).toMatchObject({ category: "Estate", categorySource: "fallback" });
+  });
+
+  it("never returns the API key to the browser", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "super-secret-key");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(completion('{"category":"Other"}')));
+    const app = await testApp({ openai: createOpenAiClient() });
+    const created = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "General thanks.", category: "Other",
+    });
+    const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+    expect(JSON.stringify(created.body)).not.toContain("super-secret-key");
+    expect(JSON.stringify(inbox.body)).not.toContain("super-secret-key");
   });
 });
