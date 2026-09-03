@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import { getFeedback } from "../api";
 import { maskIdentifier } from "../mask";
+import { sortNewestFirst } from "../sortFeedback";
 
 export function AdminPage({ user }) {
   const [feedback, setFeedback] = useState([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    getFeedback(user).then((response) => setFeedback(response.feedback)).catch((requestError) => setError(requestError.message));
+    getFeedback(user).then((response) => setFeedback(sortNewestFirst(response.feedback))).catch((requestError) => setError(requestError.message));
   }, [user]);
 
   return (
