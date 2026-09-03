@@ -1,4 +1,5 @@
-// Minimal OpenAI Chat Completions helper for the workshop server.
+// Minimal OpenAI helper for the workshop server (Chat Completions and
+// text-to-speech).
 //
 // - The API key is read from process.env.OPENAI_API_KEY on the server only.
 //   It must never be sent to the browser.
@@ -8,13 +9,17 @@
 
 export const OPENAI_BASE_URL = "https://api.openai.com/v1";
 export const DEFAULT_MODEL = "gpt-4o-mini";
+export const DEFAULT_TTS_MODEL = "gpt-4o-mini-tts";
+export const DEFAULT_TTS_VOICE = "alloy";
+export const DEFAULT_TTS_FORMAT = "mp3";
+const AUDIO_CONTENT_TYPES = { mp3: "audio/mpeg", wav: "audio/wav", aac: "audio/aac", flac: "audio/flac", opus: "audio/ogg" };
 const DEFAULT_TIMEOUT_MS = 15_000;
 
 export class OpenAiError extends Error {
   constructor(message, { kind, status } = {}) {
     super(message);
     this.name = "OpenAiError";
-    // "not_configured" | "upstream" | "malformed"
+    // "not_configured" | "upstream" | "malformed" | "empty_input"
     this.kind = kind ?? "upstream";
     this.status = status;
   }
@@ -32,7 +37,10 @@ function parseJsonContent(body) {
   }
 }
 
-export function createOpenAiClient({ fetch: fetchImpl, apiKey, model = DEFAULT_MODEL, baseUrl = OPENAI_BASE_URL, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export function createOpenAiClient({
+  fetch: fetchImpl, apiKey, model = DEFAULT_MODEL, ttsModel = DEFAULT_TTS_MODEL, ttsVoice = DEFAULT_TTS_VOICE,
+  baseUrl = OPENAI_BASE_URL, timeoutMs = DEFAULT_TIMEOUT_MS,
+} = {}) {
   // Both the key and fetch are resolved lazily so tests can stub
   // globalThis.fetch / process.env after the client has been created.
   const resolveKey = () => apiKey ?? process.env.OPENAI_API_KEY;
@@ -90,7 +98,51 @@ export function createOpenAiClient({ fetch: fetchImpl, apiKey, model = DEFAULT_M
     return parseJsonContent(body);
   }
 
-  return { isConfigured, chatJson, model };
+  // Turn `input` into spoken audio and return { audio: Buffer, contentType }.
+  // Blank input is refused before any network call so nothing is synthesized
+  // (or billed) for empty text. Throws OpenAiError on any failure.
+  async function speech({ input, voice = ttsVoice, format = DEFAULT_TTS_FORMAT } = {}) {
+    const text = typeof input === "string" ? input.trim() : "";
+    if (!text) {
+      throw new OpenAiError("There is no text to read aloud.", { kind: "empty_input" });
+    }
+    if (!isConfigured()) {
+      throw new OpenAiError("OPENAI_API_KEY is not configured.", { kind: "not_configured" });
+    }
+    const doFetch = resolveFetch();
+    if (typeof doFetch !== "function") {
+      throw new OpenAiError("fetch is not available.", { kind: "upstream" });
+    }
+
+    let response;
+    try {
+      response = await doFetch(`${baseUrl}/audio/speech`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${resolveKey()}` },
+        signal: typeof AbortSignal?.timeout === "function" ? AbortSignal.timeout(timeoutMs) : undefined,
+        body: JSON.stringify({ model: ttsModel, voice, input: text, response_format: format }),
+      });
+    } catch (error) {
+      throw new OpenAiError(`OpenAI request failed: ${error?.message ?? error}`, { kind: "upstream" });
+    }
+
+    if (!response?.ok) {
+      throw new OpenAiError(`OpenAI responded with status ${response?.status}.`, { kind: "upstream", status: response?.status });
+    }
+
+    let audio;
+    try {
+      audio = Buffer.from(await response.arrayBuffer());
+    } catch {
+      throw new OpenAiError("OpenAI returned unreadable audio.", { kind: "malformed" });
+    }
+    if (audio.length === 0) {
+      throw new OpenAiError("OpenAI returned empty audio.", { kind: "malformed" });
+    }
+    return { audio, contentType: AUDIO_CONTENT_TYPES[format] ?? `audio/${format}` };
+  }
+
+  return { isConfigured, chatJson, speech, model, ttsModel };
 }
 
 const defaultClient = createOpenAiClient();
@@ -101,4 +153,8 @@ export function isConfigured() {
 
 export function chatJson(args) {
   return defaultClient.chatJson(args);
+}
+
+export function speech(args) {
+  return defaultClient.speech(args);
 }

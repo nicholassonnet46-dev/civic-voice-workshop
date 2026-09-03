@@ -234,3 +234,8 @@ input[aria-invalid="true"] { border-color: #b2252a; }
   .inbox-state { padding: 32px 14px; }
   .inbox-error .primary-button { width: 100%; }
 }
+.secondary-button { border: 1px solid var(--accent); background: transparent; color: var(--accent); border-radius: 8px; padding: 12px 18px; font-weight: 700; min-width: 145px; }
+.secondary-button:hover { background: var(--accent-ring); }
+.secondary-button:disabled { opacity: .65; cursor: wait; }
+.read-aloud { display: grid; gap: 8px; justify-items: start; }
+.read-aloud .error-message { margin: 0; }

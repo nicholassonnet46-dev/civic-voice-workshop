@@ -97,5 +97,24 @@ export async function createApp(options = {}) {
     return res.json({ feedback });
   });
 
+  // Text-to-speech for the citizen confirmation screen. Audio is generated
+  // server-side so the OpenAI key never reaches the browser.
+  app.post("/api/feedback/:id/audio", async (req, res) => {
+    const feedback = db.data.feedback.find((item) => item.id === req.params.id);
+    if (!feedback) return res.status(404).json({ error: "Feedback not found." });
+    const text = normalizeFeedbackText(feedback.message);
+    if (!text) return res.status(400).json({ error: "There is no feedback text to read aloud." });
+    if (!openai.isConfigured()) {
+      return res.status(503).json({ error: "Read aloud is unavailable because no OpenAI API key is configured on the server." });
+    }
+    try {
+      const { audio, contentType } = await openai.speech({ input: text });
+      res.set("Cache-Control", "no-store");
+      return res.type(contentType).send(audio);
+    } catch {
+      return res.status(503).json({ error: "Read aloud is unavailable right now. Please try again later." });
+    }
+  });
+
   return app;
 }

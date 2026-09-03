@@ -30,3 +30,18 @@ export function updateStatus(user, id, status) {
     method: "PATCH", headers: { "x-user-role": user.role }, body: JSON.stringify({ status }),
   });
 }
+// Asks the server to read a feedback record aloud. Resolves with an audio Blob;
+// rejects with the server's JSON error message when audio is unavailable.
+export async function fetchFeedbackAudio(id) {
+  const response = await fetch(`${API_URL}/api/feedback/${encodeURIComponent(id)}/audio`, { method: "POST" });
+  if (!response.ok) {
+    let message = "Read aloud is unavailable right now.";
+    try {
+      message = (await response.json()).error ?? message;
+    } catch {
+      // keep the generic message
+    }
+    throw new Error(message);
+  }
+  return response.blob();
+}

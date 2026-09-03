@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { submitFeedback } from "../api";
+import { ReadAloudButton } from "../components/ReadAloudButton";
 import { CATEGORY_REQUIRED_MESSAGE, FEEDBACK_CATEGORIES, isValidCategory } from "../categories";
 import {
   BLANK_FEEDBACK_MESSAGE,
@@ -69,6 +70,7 @@ export function CitizenPage({ user }) {
               <p className="muted">We have filed this under <strong>{submitted.category}</strong> to help route it to the right team.</p>
             )}
             <p className="muted">Keep the reference number if you want to ask about this feedback later. We will review it and act on it where we can.</p>
+            <ReadAloudButton feedback={submitted} />
             <button type="button" className="primary-button" onClick={handleSubmitAnother}>Submit another</button>
           </div>
         ) : (
