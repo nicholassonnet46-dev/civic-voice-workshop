@@ -50,14 +50,14 @@ describe("Admin API contract", () => {
       const { app } = await isolatedApp();
       const response = await request(app).post("/api/login").send({ ...ADMIN, role: "citizen" });
       expect(response.status).toBe(401);
-      expect(response.body).toEqual({ error: expect.any(String) });
+      expect(response.body).toEqual({ error: { code: "INVALID_CREDENTIALS", message: expect.any(String) } });
     });
 
     it("rejects a wrong password", async () => {
       const { app } = await isolatedApp();
       const response = await request(app).post("/api/login").send({ ...ADMIN, password: "nope" });
       expect(response.status).toBe(401);
-      expect(response.body).toEqual({ error: expect.any(String) });
+      expect(response.body).toEqual({ error: { code: "INVALID_CREDENTIALS", message: expect.any(String) } });
     });
   });
 
@@ -82,14 +82,14 @@ describe("Admin API contract", () => {
       const { app } = await isolatedApp();
       const response = await request(app).get("/api/feedback").set("x-user-role", "citizen");
       expect(response.status).toBe(403);
-      expect(response.body).toEqual({ error: "Admin access required." });
+      expect(response.body).toEqual({ error: { code: "FORBIDDEN", message: "Admin access required." } });
     });
 
     it("forbids a missing role header", async () => {
       const { app } = await isolatedApp();
       const response = await request(app).get("/api/feedback");
       expect(response.status).toBe(403);
-      expect(response.body).toEqual({ error: "Admin access required." });
+      expect(response.body).toEqual({ error: { code: "FORBIDDEN", message: "Admin access required." } });
     });
   });
 
@@ -99,7 +99,7 @@ describe("Admin API contract", () => {
       const response = await request(app).patch("/api/feedback/fb-seed-1/status")
         .set("x-user-role", "citizen").send({ status: "Closed" });
       expect(response.status).toBe(403);
-      expect(response.body).toEqual({ error: "Admin access required." });
+      expect(response.body).toEqual({ error: { code: "FORBIDDEN", message: "Admin access required." } });
       const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
       expect(inbox.body.feedback.find((item) => item.id === "fb-seed-1").status).toBe("New");
     });

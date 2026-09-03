@@ -100,7 +100,7 @@ describe("CivicVoice baseline API", () => {
       nric: "S0000001A", name: "Aisha Rahman", message: "   \n\t ",
     });
     expect(response.status).toBe(400);
-    expect(response.body.error).toBe("Please enter feedback.");
+    expect(response.body.error).toEqual({ code: "VALIDATION_ERROR", message: "Please enter feedback." });
   });
 
   it("rejects missing and non-string feedback", async () => {
@@ -143,7 +143,7 @@ describe("CivicVoice baseline API", () => {
         nric: "S0000001A", name: "Aisha Rahman", message: "Useful text.", category,
       });
       expect(response.status, `category ${JSON.stringify(category)}`).toBe(400);
-      expect(response.body.error).toBe("Please choose a valid category.");
+      expect(response.body.error).toEqual({ code: "VALIDATION_ERROR", message: "Please choose a valid category." });
     }
   });
 
@@ -215,7 +215,8 @@ describe("CivicVoice baseline API", () => {
     const response = await request(app).patch("/api/feedback/fb-seed-1/status")
       .set("x-user-role", "admin").send({ status: "Done" });
     expect(response.status).toBe(400);
-    expect(response.body.error).toMatch(/New, In review, Closed/);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(response.body.error.message).toMatch(/New, In review, Closed/);
   });
 
   it("forbids status updates without the admin role", async () => {
@@ -365,8 +366,11 @@ describe("login rate limiting", () => {
     expect(fifth.status).toBe(429);
     expect(fifth.headers["retry-after"]).toBe("900");
     expect(fifth.body).toEqual({
-      error: "Too many failed sign-in attempts. Try again in 900 seconds.",
-      retryAfterSeconds: 900,
+      error: {
+        code: "RATE_LIMITED",
+        message: "Too many failed sign-in attempts. Try again in 900 seconds.",
+        retryAfterSeconds: 900,
+      },
     });
 
     // Even the correct password is refused while blocked.

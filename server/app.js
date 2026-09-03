@@ -4,6 +4,7 @@ import cors from "cors";
 import { isValidCategory } from "./lib/categories.js";
 import { categorizeFeedback } from "./lib/categorize.js";
 import { createDb } from "./lib/db.js";
+import { ApiError, ERROR_CODES, asyncRoute, createErrorHandler, notFoundHandler } from "./lib/errors.js";
 import { createOpenAiClient } from "./lib/openai.js";
 import { createLoginLimiter } from "./lib/rateLimit.js";
 import { generateReference } from "./lib/reference.js";
@@ -28,23 +29,24 @@ export async function createApp(options = {}) {
 
   function tooManyAttempts(res, retryAfterSeconds) {
     res.set("Retry-After", String(retryAfterSeconds));
-    return res.status(429).json({
-      error: `Too many failed sign-in attempts. Try again in ${retryAfterSeconds} seconds.`,
-      retryAfterSeconds,
-    });
+    return new ApiError(
+      ERROR_CODES.RATE_LIMITED,
+      `Too many failed sign-in attempts. Try again in ${retryAfterSeconds} seconds.`,
+      { retryAfterSeconds },
+    );
   }
 
   app.post("/api/login", (req, res) => {
     const { nric, password, role } = req.body ?? {};
     const limit = loginLimiter.check(nric);
-    if (!limit.allowed) return tooManyAttempts(res, limit.retryAfterSeconds);
+    if (!limit.allowed) throw tooManyAttempts(res, limit.retryAfterSeconds);
 
     const candidate = db.data.users.find((entry) => entry.nric === nric && entry.role === role);
     const user = candidate && verifyPassword(password, candidate) ? candidate : null;
     if (!user) {
       const after = loginLimiter.recordFailure(nric);
-      if (!after.allowed) return tooManyAttempts(res, after.retryAfterSeconds);
-      return res.status(401).json({ error: "Invalid NRIC, password, or sign-in mode." });
+      if (!after.allowed) throw tooManyAttempts(res, after.retryAfterSeconds);
+      throw new ApiError(ERROR_CODES.INVALID_CREDENTIALS, "Invalid NRIC, password, or sign-in mode.");
     }
     loginLimiter.recordSuccess(nric);
 
@@ -55,18 +57,18 @@ export async function createApp(options = {}) {
 
   app.get("/api/feedback", (req, res) => {
     if (req.header("x-user-role") !== "admin") {
-      return res.status(403).json({ error: "Admin access required." });
+      throw new ApiError(ERROR_CODES.FORBIDDEN, "Admin access required.");
     }
     return res.json({ feedback: sortNewestFirst(db.data.feedback) });
   });
 
-  app.post("/api/feedback", async (req, res) => {
+  app.post("/api/feedback", asyncRoute(async (req, res) => {
     const { nric, name } = req.body ?? {};
     const message = normalizeFeedbackText(req.body?.message);
-    if (!message) return res.status(400).json({ error: "Please enter feedback." });
+    if (!message) throw new ApiError(ERROR_CODES.VALIDATION_ERROR, "Please enter feedback.");
     const requested = req.body?.category === undefined ? "Other" : req.body.category;
     if (!isValidCategory(requested)) {
-      return res.status(400).json({ error: "Please choose a valid category." });
+      throw new ApiError(ERROR_CODES.VALIDATION_ERROR, "Please choose a valid category.");
     }
     // A specific citizen choice is kept. "Other" (or no choice) is auto-categorized:
     // by the model when a key is configured, otherwise by a deterministic keyword rule.
@@ -81,22 +83,26 @@ export async function createApp(options = {}) {
     db.data.feedback.unshift(feedback);
     await db.write();
     return res.status(201).json({ feedback });
-  });
+  }));
 
-  app.patch("/api/feedback/:id/status", async (req, res) => {
+  app.patch("/api/feedback/:id/status", asyncRoute(async (req, res) => {
     if (req.header("x-user-role") !== "admin") {
-      return res.status(403).json({ error: "Admin access required." });
+      throw new ApiError(ERROR_CODES.FORBIDDEN, "Admin access required.");
     }
     const { status } = req.body ?? {};
     if (!FEEDBACK_STATUSES.includes(status)) {
-      return res.status(400).json({ error: `Status must be one of: ${FEEDBACK_STATUSES.join(", ")}.` });
+      throw new ApiError(ERROR_CODES.VALIDATION_ERROR, `Status must be one of: ${FEEDBACK_STATUSES.join(", ")}.`);
     }
     const feedback = db.data.feedback.find((item) => item.id === req.params.id);
-    if (!feedback) return res.status(404).json({ error: "Feedback not found." });
+    if (!feedback) throw new ApiError(ERROR_CODES.NOT_FOUND, "Feedback not found.");
     feedback.status = status;
     await db.write();
     return res.json({ feedback });
-  });
+  }));
+
+  // Unknown routes and thrown errors share the { error: { code, message } } contract.
+  app.use(notFoundHandler);
+  app.use(createErrorHandler({ log: options.logError }));
 
   // CV-033: AI-suggested urgency and routing. Suggestions are stored separately
   // from the record's own fields and never change `status`.

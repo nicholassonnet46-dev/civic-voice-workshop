@@ -1,3 +1,5 @@
+import { toApiError } from "./apiError.js";
+
 export const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
 
 async function api(path, options = {}) {
@@ -5,12 +7,12 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json", ...(options.headers ?? {}) },
     ...options,
   });
-  const body = await response.json();
+  const body = await response.json().catch(() => null);
   if (!response.ok) {
-    const error = new Error(body.error ?? "Something went wrong.");
-    error.status = response.status;
+    // Errors carry `.code` (e.g. FORBIDDEN), `.status`, and a human-readable `.message`.
+    const error = toApiError(body, response.status);
     const retryAfterHeader = Number(response.headers.get("Retry-After"));
-    error.retryAfterSeconds = body.retryAfterSeconds ?? (retryAfterHeader > 0 ? retryAfterHeader : null);
+    error.retryAfterSeconds ??= retryAfterHeader > 0 ? retryAfterHeader : null;
     throw error;
   }
   return body;
