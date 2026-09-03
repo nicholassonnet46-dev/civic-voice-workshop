@@ -175,6 +175,29 @@ describe("CivicVoice baseline API", () => {
     expect(response.status).toBe(404);
   });
 
+  it("stores malicious-looking feedback as plain text with only normalization applied", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "civic-voice-"));
+    const file = path.join(directory, "db.json");
+    const app = await createApp({ db: await createDb(file) });
+    const payload = "<img src=x onerror=alert(1)>\u0000  <b>bold</b>";
+    const response = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: payload,
+    });
+    expect(response.status).toBe(201);
+    expect(response.body.feedback.message).toBe("<img src=x onerror=alert(1)> <b>bold</b>");
+    const persisted = JSON.parse(await readFile(file, "utf8"));
+    expect(persisted.feedback[0].message).toBe("<img src=x onerror=alert(1)> <b>bold</b>");
+    expect(persisted.feedback[0].message).not.toContain("&lt;");
+  });
+
+  it("rejects feedback that is empty after normalization", async () => {
+    const app = await testApp();
+    const response = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "  \u0000\u200B \n ",
+    });
+    expect(response.status).toBe(400);
+  });
+
   it("blocks the feedback list without the admin role header", async () => {
     const app = await testApp();
     const response = await request(app).get("/api/feedback");

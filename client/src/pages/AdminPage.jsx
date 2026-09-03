@@ -42,7 +42,8 @@ export function AdminPage({ user }) {
                 {" · "}{item.category}
                 {" · "}{new Date(item.createdAt).toLocaleDateString()}
               </div>
-              <p>{item.message}</p>
+              {/* Feedback is rendered as text only. Never use dangerouslySetInnerHTML here. */}
+              <p className="feedback-message">{item.message}</p>
             </div>
             <select
               className="status-select"

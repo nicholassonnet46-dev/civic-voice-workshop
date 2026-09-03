@@ -162,6 +162,7 @@ textarea { resize: vertical; line-height: 1.6; }
 .feedback-row { display: flex; justify-content: space-between; gap: 24px; padding: 20px 0; border-bottom: 1px solid var(--border-soft); }
 .feedback-row:last-child { border-bottom: 0; padding-bottom: 0; }
 .feedback-row p { margin: 8px 0 0; line-height: 1.55; }
+.feedback-message { white-space: pre-wrap; overflow-wrap: anywhere; }
 .feedback-meta { color: var(--text-muted); font-size: 13px; }
 .masked-id { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
 .status-select { align-self: flex-start; border: 1px solid var(--border); border-radius: 8px; padding: 6px 8px; font: inherit; font-size: 13px; background: var(--bg-elevated); color: inherit; }
