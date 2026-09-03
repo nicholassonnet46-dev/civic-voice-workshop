@@ -5,6 +5,7 @@ import { isValidCategory } from "./lib/categories.js";
 import { createDb } from "./lib/db.js";
 import { generateReference } from "./lib/reference.js";
 import { FEEDBACK_STATUSES, sortNewestFirst } from "./lib/feedback.js";
+import { normalizeFeedbackText } from "./lib/sanitize.js";
 
 export async function createApp(options = {}) {
   const db = options.db ?? (await createDb());
@@ -37,7 +38,7 @@ export async function createApp(options = {}) {
 
   app.post("/api/feedback", async (req, res) => {
     const { nric, name } = req.body ?? {};
-    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    const message = normalizeFeedbackText(req.body?.message);
     if (!message) return res.status(400).json({ error: "Please enter feedback." });
     const category = req.body?.category === undefined ? "Other" : req.body.category;
     if (!isValidCategory(category)) {
