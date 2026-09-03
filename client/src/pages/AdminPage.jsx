@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { getFeedback } from "../api";
+import { getFeedback, updateStatus } from "../api";
 import { maskIdentifier } from "../mask";
 import { sortNewestFirst } from "../sortFeedback";
+
+const STATUSES = ["New", "In review", "Closed"];
 
 export function AdminPage({ user }) {
   const [feedback, setFeedback] = useState([]);
@@ -10,6 +12,16 @@ export function AdminPage({ user }) {
   useEffect(() => {
     getFeedback(user).then((response) => setFeedback(sortNewestFirst(response.feedback))).catch((requestError) => setError(requestError.message));
   }, [user]);
+
+  async function handleStatusChange(id, status) {
+    setError("");
+    try {
+      const response = await updateStatus(user, id, status);
+      setFeedback((current) => current.map((item) => (item.id === id ? response.feedback : item)));
+    } catch (requestError) {
+      setError(requestError.message);
+    }
+  }
 
   return (
     <main className="page-shell admin-shell">
@@ -32,7 +44,14 @@ export function AdminPage({ user }) {
               </div>
               <p>{item.message}</p>
             </div>
-            <span className="status-pill">{item.status}</span>
+            <select
+              className="status-select"
+              aria-label={`Status for feedback from ${item.name}`}
+              value={item.status}
+              onChange={(event) => handleStatusChange(item.id, event.target.value)}
+            >
+              {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+            </select>
           </article>
         ))}
       </section>

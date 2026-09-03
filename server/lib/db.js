@@ -1,4 +1,5 @@
-import { JSONFilePreset } from "lowdb/node";
+import { Low } from "lowdb";
+import { JSONFile } from "lowdb/node";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,7 +10,10 @@ export const dbPath = path.resolve(here, "../../data/db.json");
 
 export async function createDb(file = dbPath) {
   await mkdir(path.dirname(file), { recursive: true });
-  const db = await JSONFilePreset(file, freshSeed());
+  // Use the JSONFile adapter directly: JSONFilePreset silently swaps in an
+  // in-memory adapter when NODE_ENV=test, which hides persistence bugs.
+  const db = new Low(new JSONFile(file), freshSeed());
+  await db.read();
   if (!db.data.users?.length) {
     db.data = freshSeed();
     await db.write();
