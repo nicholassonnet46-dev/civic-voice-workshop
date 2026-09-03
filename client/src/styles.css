@@ -68,3 +68,4 @@ textarea { resize: vertical; line-height: 1.6; }
 .success-panel { display: grid; gap: 12px; justify-items: start; }
 .success-panel .success-banner { width: 100%; margin-bottom: 4px; }
 .success-panel p { margin: 0 0 8px; line-height: 1.6; }
+.reference-number { font-variant-numeric: tabular-nums; letter-spacing: .04em; }

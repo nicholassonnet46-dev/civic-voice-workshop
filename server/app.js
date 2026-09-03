@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import { isValidCategory } from "./lib/categories.js";
 import { createDb } from "./lib/db.js";
+import { generateReference } from "./lib/reference.js";
 
 export async function createApp(options = {}) {
   const db = options.db ?? (await createDb());
@@ -42,7 +43,8 @@ export async function createApp(options = {}) {
       return res.status(400).json({ error: "Please choose a valid category." });
     }
     const feedback = {
-      id: crypto.randomUUID(), nric, name, message, category, status: "New",
+      id: crypto.randomUUID(), reference: generateReference(db.data.feedback),
+      nric, name, message, category, status: "New",
       createdAt: new Date().toISOString(),
     };
     db.data.feedback.unshift(feedback);

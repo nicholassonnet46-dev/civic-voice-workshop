@@ -99,6 +99,33 @@ describe("CivicVoice baseline API", () => {
     expect(response.body.feedback.category).toBe("Other");
   });
 
+  it("returns a short human-readable reference that is stored on the record", async () => {
+    const app = await testApp();
+    const response = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message: "Please add more bins.", category: "Environment",
+    });
+    expect(response.status).toBe(201);
+    const { reference, id } = response.body.feedback;
+    expect(reference).toMatch(/^CV-\d{6}$/);
+    expect(reference).not.toBe(id);
+    expect(reference.length).toBeLessThan(id.length);
+
+    const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+    expect(inbox.body.feedback.find((item) => item.id === id).reference).toBe(reference);
+  });
+
+  it("gives each submission a different reference", async () => {
+    const app = await testApp();
+    const references = new Set();
+    for (let i = 0; i < 10; i += 1) {
+      const response = await request(app).post("/api/feedback").send({
+        nric: "S0000001A", name: "Aisha Rahman", message: `Submission ${i}`, category: "Other",
+      });
+      references.add(response.body.feedback.reference);
+    }
+    expect(references.size).toBe(10);
+  });
+
   it("blocks the feedback list without the admin role header", async () => {
     const app = await testApp();
     const response = await request(app).get("/api/feedback");
