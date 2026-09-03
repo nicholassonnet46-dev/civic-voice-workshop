@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import express from "express";
 import cors from "cors";
+import { isValidCategory } from "./lib/categories.js";
 import { createDb } from "./lib/db.js";
 
 export async function createApp(options = {}) {
@@ -36,8 +37,12 @@ export async function createApp(options = {}) {
     const { nric, name } = req.body ?? {};
     const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
     if (!message) return res.status(400).json({ error: "Please enter feedback." });
+    const category = req.body?.category === undefined ? "Other" : req.body.category;
+    if (!isValidCategory(category)) {
+      return res.status(400).json({ error: "Please choose a valid category." });
+    }
     const feedback = {
-      id: crypto.randomUUID(), nric, name, message, category: "General", status: "New",
+      id: crypto.randomUUID(), nric, name, message, category, status: "New",
       createdAt: new Date().toISOString(),
     };
     db.data.feedback.unshift(feedback);
