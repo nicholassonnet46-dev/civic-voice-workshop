@@ -63,3 +63,5 @@ textarea { resize: vertical; line-height: 1.6; }
   .form-footer { align-items: stretch; flex-direction: column; }
   .form-footer .primary-button { width: 100%; }
 }
+.character-count { text-align: right; color: #69747b; font-size: 13px; margin-top: -6px; }
+.character-count.over-limit { color: #b2252a; font-weight: 600; }
