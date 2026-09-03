@@ -6,7 +6,13 @@ async function api(path, options = {}) {
     ...options,
   });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error ?? "Something went wrong.");
+  if (!response.ok) {
+    const error = new Error(body.error ?? "Something went wrong.");
+    error.status = response.status;
+    const retryAfterHeader = Number(response.headers.get("Retry-After"));
+    error.retryAfterSeconds = body.retryAfterSeconds ?? (retryAfterHeader > 0 ? retryAfterHeader : null);
+    throw error;
+  }
   return body;
 }
 
