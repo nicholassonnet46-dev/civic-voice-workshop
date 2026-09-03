@@ -1,25 +1,35 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useReducer, useState } from "react";
 import { getFeedback, updateStatus } from "../api";
+import { inboxReducer, inboxView, initialInboxState } from "../inboxState";
 import { maskIdentifier } from "../mask";
 import { sortNewestFirst } from "../sortFeedback";
 
 const STATUSES = ["New", "In review", "Closed"];
 
 export function AdminPage({ user }) {
-  const [feedback, setFeedback] = useState([]);
-  const [error, setError] = useState("");
+  const [state, dispatch] = useReducer(inboxReducer, initialInboxState);
+  const { feedback, error } = state;
+  const view = inboxView(state);
+  const [actionError, setActionError] = useState("");
 
-  useEffect(() => {
-    getFeedback(user).then((response) => setFeedback(sortNewestFirst(response.feedback))).catch((requestError) => setError(requestError.message));
+  const load = useCallback(() => {
+    let cancelled = false;
+    dispatch({ type: "load" });
+    getFeedback(user)
+      .then((response) => { if (!cancelled) dispatch({ type: "loaded", feedback: sortNewestFirst(response.feedback) }); })
+      .catch((requestError) => { if (!cancelled) dispatch({ type: "failed", error: requestError.message }); });
+    return () => { cancelled = true; };
   }, [user]);
 
+  useEffect(() => load(), [load]);
+
   async function handleStatusChange(id, status) {
-    setError("");
+    setActionError("");
     try {
       const response = await updateStatus(user, id, status);
-      setFeedback((current) => current.map((item) => (item.id === id ? response.feedback : item)));
+      dispatch({ type: "replace", feedback: response.feedback });
     } catch (requestError) {
-      setError(requestError.message);
+      setActionError(requestError.message);
     }
   }
 
@@ -30,10 +40,32 @@ export function AdminPage({ user }) {
         <h1>Feedback inbox</h1>
         <p>A simple view of feedback received from members of the public.</p>
       </div>
-      {error && <p className="error-message">{error}</p>}
-      <section className="feedback-list">
-        <div className="list-header"><strong>Latest feedback</strong><span>{feedback.length} items</span></div>
-        {feedback.map((item) => (
+      {actionError && <p className="error-message">{actionError}</p>}
+      <section className="feedback-list" aria-busy={view === "loading"}>
+        <div className="list-header">
+          <strong>Latest feedback</strong>
+          <span>{view === "list" ? `${feedback.length} items` : view === "loading" ? "Loading…" : ""}</span>
+        </div>
+        {view === "loading" && (
+          <div className="inbox-state inbox-loading" role="status">
+            <span className="spinner" aria-hidden="true" />
+            <p>Loading feedback…</p>
+          </div>
+        )}
+        {view === "error" && (
+          <div className="inbox-state inbox-error" role="alert">
+            <strong>Couldn’t load the inbox</strong>
+            <p className="error-message">{error}</p>
+            <button type="button" className="primary-button" onClick={load}>Retry</button>
+          </div>
+        )}
+        {view === "empty" && (
+          <div className="inbox-state inbox-empty">
+            <strong>No feedback yet</strong>
+            <p>New submissions from members of the public will appear here.</p>
+          </div>
+        )}
+        {view === "list" && feedback.map((item) => (
           <article className="feedback-row" key={item.id}>
             <div>
               <div className="feedback-meta">
