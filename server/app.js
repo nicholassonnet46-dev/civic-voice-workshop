@@ -5,6 +5,7 @@ import { isValidCategory } from "./lib/categories.js";
 import { categorizeFeedback } from "./lib/categorize.js";
 import { createDb } from "./lib/db.js";
 import { createOpenAiClient } from "./lib/openai.js";
+import { createLoginLimiter } from "./lib/rateLimit.js";
 import { generateReference } from "./lib/reference.js";
 import { FEEDBACK_STATUSES, sortNewestFirst } from "./lib/feedback.js";
 import { normalizeFeedbackText } from "./lib/sanitize.js";
@@ -14,6 +15,8 @@ export async function createApp(options = {}) {
   const db = options.db ?? (await createDb());
   // Server-side only: the OpenAI key comes from process.env and never reaches the browser.
   const openai = options.openai ?? createOpenAiClient();
+  // Injectable so tests own an isolated limiter; the default is per-process, in memory.
+  const loginLimiter = options.loginLimiter ?? createLoginLimiter();
   const app = express();
   app.use(cors());
   app.use(express.json());
@@ -22,11 +25,27 @@ export async function createApp(options = {}) {
     res.json({ ok: true, service: "civic-voice-api" });
   });
 
+  function tooManyAttempts(res, retryAfterSeconds) {
+    res.set("Retry-After", String(retryAfterSeconds));
+    return res.status(429).json({
+      error: `Too many failed sign-in attempts. Try again in ${retryAfterSeconds} seconds.`,
+      retryAfterSeconds,
+    });
+  }
+
   app.post("/api/login", (req, res) => {
     const { nric, password, role } = req.body ?? {};
+    const limit = loginLimiter.check(nric);
+    if (!limit.allowed) return tooManyAttempts(res, limit.retryAfterSeconds);
+
     const candidate = db.data.users.find((entry) => entry.nric === nric && entry.role === role);
     const user = candidate && verifyPassword(password, candidate) ? candidate : null;
-    if (!user) return res.status(401).json({ error: "Invalid NRIC, password, or sign-in mode." });
+    if (!user) {
+      const after = loginLimiter.recordFailure(nric);
+      if (!after.allowed) return tooManyAttempts(res, after.retryAfterSeconds);
+      return res.status(401).json({ error: "Invalid NRIC, password, or sign-in mode." });
+    }
+    loginLimiter.recordSuccess(nric);
 
     // Workshop baseline only: this is deliberately not a production session.
     const token = Buffer.from(`${user.nric}:${user.role}`).toString("base64");

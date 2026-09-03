@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { login } from "../api";
 import { HealthIndicator } from "../components/HealthIndicator";
+import { describeLoginError } from "../loginErrors";
 import { normalizeNric, validateNric } from "../validation";
 
 export function LoginPage({ onLogin }) {
@@ -30,7 +31,7 @@ export function LoginPage({ onLogin }) {
       const session = await login({ nric: normalizeNric(nric), password, role });
       onLogin(session);
     } catch (requestError) {
-      setError(requestError.message);
+      setError(describeLoginError(requestError));
     } finally {
       setBusy(false);
     }

@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "./app.js";
 import { createDb } from "./lib/db.js";
 import { createOpenAiClient } from "./lib/openai.js";
+import { createLoginLimiter } from "./lib/rateLimit.js";
 
 // Tests never spend OpenAI credits: fetch is stubbed and the key defaults to "".
 afterEach(() => {
@@ -21,7 +22,7 @@ async function testApp(options = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "civic-voice-"));
   const db = await createDb(path.join(directory, "db.json"));
   const openai = options.openai ?? createOpenAiClient({ apiKey: "", fetch: () => { throw new Error("unexpected fetch"); } });
-  return createApp({ db, openai });
+  return createApp({ db, openai, loginLimiter: options.loginLimiter });
 }
 
 describe("CivicVoice baseline API", () => {
@@ -341,5 +342,80 @@ describe("CV-029 auto-categorize feedback", () => {
     const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
     expect(JSON.stringify(created.body)).not.toContain("super-secret-key");
     expect(JSON.stringify(inbox.body)).not.toContain("super-secret-key");
+  });
+});
+
+describe("login rate limiting", () => {
+  const citizen = { nric: "S0000001A", password: "citizen123", role: "citizen" };
+  const wrong = { ...citizen, password: "not-the-password" };
+
+  function fakeClock(start = 1_700_000_000_000) {
+    let current = start;
+    return { now: () => current, advance: (ms) => { current += ms; } };
+  }
+
+  it("returns 429 with Retry-After after five failed attempts for the same NRIC", async () => {
+    const limiter = createLoginLimiter({ now: fakeClock().now });
+    const app = await testApp({ loginLimiter: limiter });
+    for (let attempt = 1; attempt <= 4; attempt += 1) {
+      const response = await request(app).post("/api/login").send(wrong);
+      expect(response.status, `attempt ${attempt}`).toBe(401);
+    }
+    const fifth = await request(app).post("/api/login").send(wrong);
+    expect(fifth.status).toBe(429);
+    expect(fifth.headers["retry-after"]).toBe("900");
+    expect(fifth.body).toEqual({
+      error: "Too many failed sign-in attempts. Try again in 900 seconds.",
+      retryAfterSeconds: 900,
+    });
+
+    // Even the correct password is refused while blocked.
+    const blocked = await request(app).post("/api/login").send(citizen);
+    expect(blocked.status).toBe(429);
+    expect(Number(blocked.headers["retry-after"])).toBeGreaterThan(0);
+  });
+
+  it("does not block other NRICs", async () => {
+    const limiter = createLoginLimiter({ now: fakeClock().now });
+    const app = await testApp({ loginLimiter: limiter });
+    for (let attempt = 0; attempt < 5; attempt += 1) await request(app).post("/api/login").send(wrong);
+    expect((await request(app).post("/api/login").send(wrong)).status).toBe(429);
+    const admin = await request(app).post("/api/login").send({ nric: "S0000002B", password: "admin123", role: "admin" });
+    expect(admin.status).toBe(200);
+  });
+
+  it("keeps successful sign-in usable and resets the counter on success", async () => {
+    const limiter = createLoginLimiter({ now: fakeClock().now });
+    const app = await testApp({ loginLimiter: limiter });
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      expect((await request(app).post("/api/login").send(wrong)).status).toBe(401);
+    }
+    const success = await request(app).post("/api/login").send(citizen);
+    expect(success.status).toBe(200);
+    expect(success.body.user.nric).toBe("S0000001A");
+
+    // The success cleared the four earlier failures, so four more are still 401, not 429.
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      expect((await request(app).post("/api/login").send(wrong)).status).toBe(401);
+    }
+    expect((await request(app).post("/api/login").send(citizen)).status).toBe(200);
+  });
+
+  it("lifts the block once the window has passed", async () => {
+    const clock = fakeClock();
+    const limiter = createLoginLimiter({ now: clock.now });
+    const app = await testApp({ loginLimiter: limiter });
+    for (let attempt = 0; attempt < 5; attempt += 1) await request(app).post("/api/login").send(wrong);
+    expect((await request(app).post("/api/login").send(citizen)).status).toBe(429);
+    clock.advance(15 * 60 * 1000);
+    expect((await request(app).post("/api/login").send(citizen)).status).toBe(200);
+  });
+
+  it("gives every app its own limiter when none is injected", async () => {
+    const first = await testApp();
+    for (let attempt = 0; attempt < 5; attempt += 1) await request(first).post("/api/login").send(wrong);
+    expect((await request(first).post("/api/login").send(citizen)).status).toBe(429);
+    const second = await testApp();
+    expect((await request(second).post("/api/login").send(citizen)).status).toBe(200);
   });
 });
