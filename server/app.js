@@ -10,6 +10,7 @@ import { generateReference } from "./lib/reference.js";
 import { FEEDBACK_STATUSES, sortNewestFirst } from "./lib/feedback.js";
 import { normalizeFeedbackText } from "./lib/sanitize.js";
 import { verifyPassword } from "./lib/passwords.js";
+import { isValidTeam, isValidUrgency, suggestTriage, TEAMS, URGENCY_LEVELS } from "./lib/triage.js";
 
 export async function createApp(options = {}) {
   const db = options.db ?? (await createDb());
@@ -93,6 +94,63 @@ export async function createApp(options = {}) {
     const feedback = db.data.feedback.find((item) => item.id === req.params.id);
     if (!feedback) return res.status(404).json({ error: "Feedback not found." });
     feedback.status = status;
+    await db.write();
+    return res.json({ feedback });
+  });
+
+  // CV-033: AI-suggested urgency and routing. Suggestions are stored separately
+  // from the record's own fields and never change `status`.
+  app.post("/api/feedback/:id/triage", async (req, res) => {
+    if (req.header("x-user-role") !== "admin") {
+      return res.status(403).json({ error: "Admin access required." });
+    }
+    const feedback = db.data.feedback.find((item) => item.id === req.params.id);
+    if (!feedback) return res.status(404).json({ error: "Feedback not found." });
+    let suggestion;
+    try {
+      suggestion = await suggestTriage(feedback, openai);
+    } catch (error) {
+      if (error?.kind === "not_configured") {
+        return res.status(503).json({ error: "AI triage is not configured on this server." });
+      }
+      if (error?.kind === "malformed") {
+        return res.status(502).json({ error: "The triage suggestion could not be understood. Please try again." });
+      }
+      return res.status(502).json({ error: "The triage service is unavailable. Please try again later." });
+    }
+    feedback.suggestion = { ...suggestion, createdAt: new Date().toISOString() };
+    await db.write();
+    return res.json({ feedback });
+  });
+
+  app.patch("/api/feedback/:id/triage", async (req, res) => {
+    if (req.header("x-user-role") !== "admin") {
+      return res.status(403).json({ error: "Admin access required." });
+    }
+    const { urgency, team } = req.body ?? {};
+    if (!isValidUrgency(urgency)) {
+      return res.status(400).json({ error: `Urgency must be one of: ${URGENCY_LEVELS.join(", ")}.` });
+    }
+    if (!isValidTeam(team)) {
+      return res.status(400).json({ error: `Team must be one of: ${TEAMS.join(", ")}.` });
+    }
+    const feedback = db.data.feedback.find((item) => item.id === req.params.id);
+    if (!feedback) return res.status(404).json({ error: "Feedback not found." });
+    feedback.urgency = urgency;
+    feedback.team = team;
+    feedback.triagedAt = new Date().toISOString();
+    delete feedback.suggestion;
+    await db.write();
+    return res.json({ feedback });
+  });
+
+  app.delete("/api/feedback/:id/triage", async (req, res) => {
+    if (req.header("x-user-role") !== "admin") {
+      return res.status(403).json({ error: "Admin access required." });
+    }
+    const feedback = db.data.feedback.find((item) => item.id === req.params.id);
+    if (!feedback) return res.status(404).json({ error: "Feedback not found." });
+    delete feedback.suggestion;
     await db.write();
     return res.json({ feedback });
   });

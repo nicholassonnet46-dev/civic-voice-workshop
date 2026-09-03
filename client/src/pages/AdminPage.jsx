@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useReducer, useState } from "react";
 import { getFeedback, updateStatus } from "../api";
 import { inboxReducer, inboxView, initialInboxState } from "../inboxState";
+import { AiActions } from "../components/AiActions";
 import { maskIdentifier } from "../mask";
 import { normalizeQuery, searchFeedback } from "../search";
 import { sortNewestFirst } from "../sortFeedback";
@@ -28,6 +29,10 @@ export function AdminPage({ user }) {
   }, [user]);
 
   useEffect(() => load(), [load]);
+
+  function replaceItem(updated) {
+    dispatch({ type: "replace", feedback: updated });
+  }
 
   async function handleStatusChange(id, status) {
     setActionError("");
@@ -115,6 +120,7 @@ export function AdminPage({ user }) {
               </div>
               {/* Feedback is rendered as text only. Never use dangerouslySetInnerHTML here. */}
               <p className="feedback-message">{item.message}</p>
+              <AiActions user={user} item={item} onChange={replaceItem} />
             </div>
             <select
               className="status-select"

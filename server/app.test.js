@@ -419,3 +419,138 @@ describe("login rate limiting", () => {
     expect((await request(second).post("/api/login").send(citizen)).status).toBe(200);
   });
 });
+
+describe("CV-033 suggest urgency and routing", () => {
+  const goodSuggestion = '{"urgency":"High","team":"Land Transport","rationale":"A blocked road is a safety risk."}';
+
+  async function createItem(app, message = "A fallen tree is blocking the road outside block 12.") {
+    const created = await request(app).post("/api/feedback").send({
+      nric: "S0000001A", name: "Aisha Rahman", message, category: "Transport",
+    });
+    expect(created.status).toBe(201);
+    return created.body.feedback;
+  }
+
+  it("requires the admin role for every triage route", async () => {
+    const app = await testApp();
+    const item = await createItem(app);
+    for (const method of ["post", "patch", "delete"]) {
+      const response = await request(app)[method](`/api/feedback/${item.id}/triage`).send({ urgency: "Low", team: "Town Council" });
+      expect(response.status, method).toBe(403);
+    }
+  });
+
+  it("returns 404 for an unknown record", async () => {
+    const app = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: async () => completion(goodSuggestion) }) });
+    const response = await request(app).post("/api/feedback/nope/triage").set("x-user-role", "admin");
+    expect(response.status).toBe(404);
+  });
+
+  it("returns a clear 503 JSON error when no key is configured", async () => {
+    const app = await testApp();
+    const item = await createItem(app);
+    const response = await request(app).post(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin");
+    expect(response.status).toBe(503);
+    expect(response.body.error).toMatch(/not configured/);
+  });
+
+  it("stores a validated suggestion without touching status", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "env-test-key");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(completion(goodSuggestion)));
+    const app = await testApp({ openai: createOpenAiClient() });
+    const item = await createItem(app);
+    await request(app).patch(`/api/feedback/${item.id}/status`).set("x-user-role", "admin").send({ status: "In review" });
+
+    const response = await request(app).post(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin");
+    expect(response.status).toBe(200);
+    expect(response.body.feedback.suggestion).toMatchObject({ urgency: "High", team: "Land Transport", rationale: "A blocked road is a safety risk." });
+    expect(response.body.feedback.suggestion.createdAt).toMatch(/^\d{4}-/);
+    expect(response.body.feedback.status).toBe("In review");
+    expect(response.body.feedback.urgency).toBeUndefined();
+    expect(response.body.feedback.team).toBeUndefined();
+    expect(JSON.stringify(response.body)).not.toContain("env-test-key");
+
+    const body = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
+    expect(body.response_format.type).toBe("json_schema");
+    expect(body.response_format.json_schema.schema.properties.team.enum).toContain("General Enquiries");
+
+    const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+    const stored = inbox.body.feedback.find((entry) => entry.id === item.id);
+    expect(stored.suggestion.urgency).toBe("High");
+    expect(stored.status).toBe("In review");
+  });
+
+  it("returns 502 and stores nothing when the upstream call fails", async () => {
+    const app = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: async () => ({ ok: false, status: 500, json: async () => ({}) }) }) });
+    const item = await createItem(app);
+    const response = await request(app).post(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin");
+    expect(response.status).toBe(502);
+    expect(response.body.error).toMatch(/unavailable/);
+    const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+    expect(inbox.body.feedback.find((entry) => entry.id === item.id).suggestion).toBeUndefined();
+  });
+
+  it("rejects malformed or out-of-enum model output with 502 and stores nothing", async () => {
+    const outputs = [
+      "not json at all",
+      '{"urgency":"Critical","team":"Land Transport","rationale":"x"}',
+      '{"urgency":"High","team":"Police","rationale":"x"}',
+      '{"urgency":"High","team":"Land Transport"}',
+      '{"urgency":"High","team":"Land Transport","rationale":""}',
+    ];
+    for (const content of outputs) {
+      const app = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: async () => completion(content) }) });
+      const item = await createItem(app);
+      const response = await request(app).post(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin");
+      expect(response.status, content).toBe(502);
+      expect(response.body.error, content).toMatch(/could not be understood/);
+      const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+      const stored = inbox.body.feedback.find((entry) => entry.id === item.id);
+      expect(stored.suggestion, content).toBeUndefined();
+      expect(stored.status, content).toBe("New");
+    }
+  });
+
+  it("lets an admin accept a suggestion, persisting urgency and team and clearing it", async () => {
+    const app = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: async () => completion(goodSuggestion) }) });
+    const item = await createItem(app);
+    const suggested = await request(app).post(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin");
+    const { urgency, team } = suggested.body.feedback.suggestion;
+
+    const accepted = await request(app).patch(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin").send({ urgency, team });
+    expect(accepted.status).toBe(200);
+    expect(accepted.body.feedback).toMatchObject({ urgency: "High", team: "Land Transport", status: "New" });
+    expect(accepted.body.feedback.triagedAt).toMatch(/^\d{4}-/);
+    expect(accepted.body.feedback.suggestion).toBeUndefined();
+
+    const inbox = await request(app).get("/api/feedback").set("x-user-role", "admin");
+    expect(inbox.body.feedback.find((entry) => entry.id === item.id)).toMatchObject({ urgency: "High", team: "Land Transport" });
+  });
+
+  it("rejects accepting values outside the fixed lists", async () => {
+    const app = await testApp();
+    const item = await createItem(app);
+    for (const body of [{ urgency: "Critical", team: "Town Council" }, { urgency: "Low", team: "Police" }, {}, { urgency: "low", team: "Town Council" }]) {
+      const response = await request(app).patch(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin").send(body);
+      expect(response.status, JSON.stringify(body)).toBe(400);
+    }
+    const unknown = await request(app).patch("/api/feedback/nope/triage").set("x-user-role", "admin").send({ urgency: "Low", team: "Town Council" });
+    expect(unknown.status).toBe(404);
+  });
+
+  it("lets an admin dismiss a suggestion, leaving the record otherwise unchanged", async () => {
+    const app = await testApp({ openai: createOpenAiClient({ apiKey: "k", fetch: async () => completion(goodSuggestion) }) });
+    const item = await createItem(app);
+    await request(app).post(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin");
+
+    const dismissed = await request(app).delete(`/api/feedback/${item.id}/triage`).set("x-user-role", "admin");
+    expect(dismissed.status).toBe(200);
+    expect(dismissed.body.feedback.suggestion).toBeUndefined();
+    expect(dismissed.body.feedback.urgency).toBeUndefined();
+    expect(dismissed.body.feedback.status).toBe("New");
+    expect(dismissed.body.feedback.message).toBe(item.message);
+
+    const unknown = await request(app).delete("/api/feedback/nope/triage").set("x-user-role", "admin");
+    expect(unknown.status).toBe(404);
+  });
+});
