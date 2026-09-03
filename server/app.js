@@ -33,7 +33,8 @@ export async function createApp(options = {}) {
   });
 
   app.post("/api/feedback", async (req, res) => {
-    const { nric, name, message } = req.body ?? {};
+    const { nric, name } = req.body ?? {};
+    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
     if (!message) return res.status(400).json({ error: "Please enter feedback." });
     const feedback = {
       id: crypto.randomUUID(), nric, name, message, category: "General", status: "New",
