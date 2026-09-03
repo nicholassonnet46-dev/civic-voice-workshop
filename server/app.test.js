@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import request from "supertest";
@@ -36,6 +36,50 @@ describe("CivicVoice baseline API", () => {
     const response = await request(app).post("/api/login").send({
       nric: "S0000001A", password: "citizen123", role: "citizen",
     });
+    expect(response.status).toBe(200);
+    expect(response.body.user.role).toBe("citizen");
+  });
+
+  it("never stores demo passwords in plain text", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "civic-voice-"));
+    const file = path.join(directory, "db.json");
+    const db = await createDb(file);
+    const raw = await readFile(file, "utf8");
+    expect(raw).not.toContain("citizen123");
+    expect(raw).not.toContain("admin123");
+    for (const user of JSON.parse(raw).users) {
+      expect(user).not.toHaveProperty("password");
+      expect(user.passwordHash).toMatch(/^[0-9a-f]{128}$/);
+      expect(user.passwordSalt).toMatch(/^[0-9a-f]{32}$/);
+    }
+    const [citizen, admin] = db.data.users;
+    expect(citizen.passwordSalt).not.toBe(admin.passwordSalt);
+
+    const app = await createApp({ db });
+    const login = await request(app).post("/api/login").send({ nric: "S0000002B", password: "admin123", role: "admin" });
+    expect(login.status).toBe(200);
+    expect(login.body.user).toEqual({ nric: "S0000002B", name: "Daniel Tan", role: "admin" });
+    const wrong = await request(app).post("/api/login").send({ nric: "S0000002B", password: "admin124", role: "admin" });
+    expect(wrong.status).toBe(401);
+  });
+
+  it("migrates an existing db.json that still holds plain-text passwords", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "civic-voice-"));
+    const file = path.join(directory, "db.json");
+    await writeFile(file, JSON.stringify({
+      users: [
+        { nric: "S0000001A", password: "citizen123", name: "Aisha Rahman", role: "citizen" },
+        { nric: "S0000002B", password: "admin123", name: "Daniel Tan", role: "admin" },
+      ],
+      feedback: [],
+    }));
+    const db = await createDb(file);
+    const raw = await readFile(file, "utf8");
+    expect(raw).not.toContain("citizen123");
+    expect(JSON.parse(raw).users.every((user) => !("password" in user) && user.passwordHash)).toBe(true);
+
+    const app = await createApp({ db });
+    const response = await request(app).post("/api/login").send({ nric: "S0000001A", password: "citizen123", role: "citizen" });
     expect(response.status).toBe(200);
     expect(response.body.user.role).toBe("citizen");
   });
