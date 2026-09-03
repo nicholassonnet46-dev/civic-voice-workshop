@@ -52,6 +52,7 @@ textarea { resize: vertical; line-height: 1.6; }
 .feedback-row:last-child { border-bottom: 0; padding-bottom: 0; }
 .feedback-row p { margin: 8px 0 0; line-height: 1.55; }
 .feedback-meta { color: #69747b; font-size: 13px; }
+.masked-id { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
 .status-pill { align-self: flex-start; white-space: nowrap; background: #fff1df; color: #9a5b00; border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 700; }
 @media (max-width: 760px) {
   .split-layout { grid-template-columns: 1fr; }
