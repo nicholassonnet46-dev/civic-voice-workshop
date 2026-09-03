@@ -43,3 +43,6 @@ export function acceptTriage(user, id, { urgency, team }) {
 export function dismissTriage(user, id) {
   return api(`/api/feedback/${encodeURIComponent(id)}/triage`, { method: "DELETE", headers: { "x-user-role": user.role } });
 }
+export function requestSummary(user, id) {
+  return api(`/api/feedback/${encodeURIComponent(id)}/summary`, { method: "POST", headers: { "x-user-role": user.role } });
+}

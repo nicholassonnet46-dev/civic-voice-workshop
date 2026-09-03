@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { acceptTriage, dismissTriage, suggestTriage } from "../api";
+import { acceptTriage, dismissTriage, requestSummary, suggestTriage } from "../api";
+import { canSummarize } from "../summarize";
 import { formatTriage, hasSuggestion, hasTriage } from "../triage";
 
 // Small, self-contained block of AI-assisted admin actions for one feedback
@@ -65,6 +66,16 @@ export function AiActions({ user, item, onChange }) {
           >
             {busy === "suggest" ? "Thinking..." : "Suggest triage"}
           </button>
+          {canSummarize(item) && (
+            <button
+              type="button"
+              className="small-button secondary"
+              disabled={Boolean(busy)}
+              onClick={() => run("summarize", () => requestSummary(user, item.id))}
+            >
+              {busy === "summarize" ? "Summarizing..." : "Summarize"}
+            </button>
+          )}
         </div>
       )}
       {error && <p className="error-message ai-error">{error}</p>}

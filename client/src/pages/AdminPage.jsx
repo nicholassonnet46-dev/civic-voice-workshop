@@ -119,6 +119,7 @@ export function AdminPage({ user }) {
                 {" · "}{new Date(item.createdAt).toLocaleDateString()}
               </div>
               {/* Feedback is rendered as text only. Never use dangerouslySetInnerHTML here. */}
+              {item.summary && <p className="ai-summary"><span className="triage-label">Summary</span> {item.summary}</p>}
               <p className="feedback-message">{item.message}</p>
               <AiActions user={user} item={item} onChange={replaceItem} />
             </div>
