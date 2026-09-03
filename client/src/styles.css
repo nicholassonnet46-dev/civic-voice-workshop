@@ -70,3 +70,9 @@ textarea { resize: vertical; line-height: 1.6; }
 .success-panel .success-banner { width: 100%; margin-bottom: 4px; }
 .success-panel p { margin: 0 0 8px; line-height: 1.6; }
 .reference-number { font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+/* CV-008: visible focus for keyboard users and for panels that receive focus programmatically. */
+button:focus-visible, .text-button:focus-visible { outline: 3px solid #b2252a; outline-offset: 3px; }
+.form-alert:focus, .success-panel:focus { outline: 3px solid rgba(178,37,42,.35); outline-offset: 6px; border-radius: 8px; }
+.form-alert .error-message { margin: 16px 0 0; }
+label[for] { margin-bottom: 8px; }
+label[for] + select, label[for] + textarea { margin-bottom: 15px; }
