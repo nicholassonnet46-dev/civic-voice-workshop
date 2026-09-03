@@ -202,3 +202,7 @@ input[aria-invalid="true"] { border-color: #b2252a; }
 .inbox-error { background: var(--accent-ring); border: 1px solid var(--accent); color: var(--accent); }
 .inbox-error .primary-button { margin-top: 8px; min-width: 120px; }
 .inbox-empty { background: var(--bg-panel); border: 1px dashed var(--border-input); color: var(--text-label); }
+.inbox-controls { display: flex; align-items: center; gap: 12px; padding: 16px 0 6px; border-bottom: 1px solid var(--border-soft); }
+.inbox-controls .search-field { flex: 1; margin: 0; }
+.inbox-controls input[type="search"] { padding: 11px 13px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

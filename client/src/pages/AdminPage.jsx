@@ -2,15 +2,19 @@ import { useCallback, useEffect, useReducer, useState } from "react";
 import { getFeedback, updateStatus } from "../api";
 import { inboxReducer, inboxView, initialInboxState } from "../inboxState";
 import { maskIdentifier } from "../mask";
+import { normalizeQuery, searchFeedback } from "../search";
 import { sortNewestFirst } from "../sortFeedback";
 
 const STATUSES = ["New", "In review", "Closed"];
 
 export function AdminPage({ user }) {
   const [state, dispatch] = useReducer(inboxReducer, initialInboxState);
+  const [query, setQuery] = useState("");
   const { feedback, error } = state;
   const view = inboxView(state);
   const [actionError, setActionError] = useState("");
+  const visible = searchFeedback(feedback, query);
+  const searching = normalizeQuery(query).length > 0;
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -44,8 +48,25 @@ export function AdminPage({ user }) {
       <section className="feedback-list" aria-busy={view === "loading"}>
         <div className="list-header">
           <strong>Latest feedback</strong>
-          <span>{view === "list" ? `${feedback.length} items` : view === "loading" ? "Loading…" : ""}</span>
+          <span>
+            {view === "list" ? (searching ? `${visible.length} of ${feedback.length} items` : `${feedback.length} items`) : view === "loading" ? "Loading…" : ""}
+          </span>
         </div>
+        {view === "list" && (
+          <div className="inbox-controls">
+            <label className="search-field">
+              <span className="visually-hidden">Search feedback</span>
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search messages or names…"
+                aria-label="Search feedback by message or citizen name"
+              />
+            </label>
+            {searching && <button type="button" className="text-button" onClick={() => setQuery("")}>Clear</button>}
+          </div>
+        )}
         {view === "loading" && (
           <div className="inbox-state inbox-loading" role="status">
             <span className="spinner" aria-hidden="true" />
@@ -65,7 +86,13 @@ export function AdminPage({ user }) {
             <p>New submissions from members of the public will appear here.</p>
           </div>
         )}
-        {view === "list" && feedback.map((item) => (
+        {view === "list" && searching && visible.length === 0 && (
+          <div className="inbox-state inbox-empty" role="status">
+            <strong>No feedback matches “{query.trim()}”</strong>
+            <p>Try a different keyword, or clear the search to see all {feedback.length} items.</p>
+          </div>
+        )}
+        {view === "list" && visible.map((item) => (
           <article className="feedback-row" key={item.id}>
             <div>
               <div className="feedback-meta">
