@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getFeedback } from "../api";
+import { maskIdentifier } from "../mask";
 
 export function AdminPage({ user }) {
   const [feedback, setFeedback] = useState([]);
@@ -22,7 +23,12 @@ export function AdminPage({ user }) {
         {feedback.map((item) => (
           <article className="feedback-row" key={item.id}>
             <div>
-              <div className="feedback-meta">{item.name} · {item.category} · {new Date(item.createdAt).toLocaleDateString()}</div>
+              <div className="feedback-meta">
+                {item.name}
+                {item.nric && <> · <span className="masked-id" title="Identifier masked">{maskIdentifier(item.nric)}</span></>}
+                {" · "}{item.category}
+                {" · "}{new Date(item.createdAt).toLocaleDateString()}
+              </div>
               <p>{item.message}</p>
             </div>
             <span className="status-pill">{item.status}</span>
